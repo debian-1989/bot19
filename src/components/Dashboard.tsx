@@ -28,24 +28,44 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
       </div>
 
       {isRunning && (
-        <div className="bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
-              <div>
-                <p className="text-sm font-semibold text-white">Conectado a Pump.fun</p>
-                <p className="text-xs text-gray-400">
-                  Monitoreando tokens reales en tiempo real • 
-                  <span className="text-purple-400 ml-1">pump.fun</span>
-                </p>
+        <>
+          <div className="bg-gradient-to-r from-purple-500/5 to-pink-500/5 rounded-xl border border-purple-500/20 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
+                <div>
+                  <p className="text-sm font-semibold text-white">Conectado a Pump.fun y Raydium</p>
+                  <p className="text-xs text-gray-400">
+                    Monitoreando tokens reales en tiempo real • 
+                    <span className="text-purple-400 ml-1">pump.fun + raydium.io</span>
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400">Tokens detectados</p>
+                <p className="text-lg font-bold text-purple-400">{detectedTxns.length}</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-gray-400">Tokens detectados</p>
-              <p className="text-lg font-bold text-purple-400">{detectedTxns.length}</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+              <p className="text-xs text-gray-400 mb-1">Frecuencia de Polling</p>
+              <p className="text-xl font-bold text-green-400">1 seg</p>
+              <p className="text-xs text-gray-500">pump.fun</p>
+            </div>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+              <p className="text-xs text-gray-400 mb-1">Frecuencia de Detección</p>
+              <p className="text-xl font-bold text-blue-400">0.05-0.2s</p>
+              <p className="text-xs text-gray-500">Ultra-rápida</p>
+            </div>
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+              <p className="text-xs text-gray-400 mb-1">Tokens Cargados</p>
+              <p className="text-xl font-bold text-purple-400">200</p>
+              <p className="text-xs text-gray-500">Por plataforma</p>
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {isRunning && (

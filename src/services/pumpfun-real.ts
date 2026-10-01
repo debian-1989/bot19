@@ -30,15 +30,17 @@ class PumpFunService {
   private baseUrl = 'https://frontend-api-v2.pump.fun';
   private tokens: PumpFunToken[] = [];
   private lastFetch = 0;
-  private fetchInterval = 5000; // 5 segundos
+  private fetchInterval = 1000; // 1 segundo (antes 5 segundos)
   private isPolling = false;
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private listeners: ((tokens: PumpFunToken[]) => void)[] = [];
+  private newTokenListeners: ((newTokens: PumpFunToken[]) => void)[] = [];
+  private lastTokenIds: Set<string> = new Set();
 
   constructor() {}
 
   // Obtener tokens recientes de pump.fun
-  async fetchLatestTokens(limit: number = 50): Promise<PumpFunToken[]> {
+  async fetchLatestTokens(limit: number = 200): Promise<PumpFunToken[]> {
     try {
       const response = await fetch(`${this.baseUrl}/coins/latest-metadatas?limit=${limit}&offset=0&includeNsfw=false`);
       
@@ -47,10 +49,27 @@ class PumpFunService {
       }
       
       const data = await response.json();
+      
+      // Detectar tokens NUEVOS
+      const newTokens: PumpFunToken[] = [];
+      const currentTokenIds = new Set<string>(data.map((t: PumpFunToken) => String(t.mint)));
+      
+      data.forEach((token: PumpFunToken) => {
+        if (!this.lastTokenIds.has(String(token.mint))) {
+          newTokens.push(token);
+        }
+      });
+      
+      this.lastTokenIds = currentTokenIds;
       this.tokens = data;
       this.lastFetch = Date.now();
       
-      // Notificar a los listeners
+      // Notificar a los listeners de tokens nuevos
+      if (newTokens.length > 0) {
+        this.newTokenListeners.forEach(listener => listener(newTokens));
+      }
+      
+      // Notificar a los listeners generales
       this.listeners.forEach(listener => listener(data));
       
       return data;
@@ -130,6 +149,14 @@ class PumpFunService {
     this.listeners.push(callback);
     return () => {
       this.listeners = this.listeners.filter(l => l !== callback);
+    };
+  }
+
+  // Suscribirse específicamente a tokens NUEVOS
+  onNewTokens(callback: (newTokens: PumpFunToken[]) => void) {
+    this.newTokenListeners.push(callback);
+    return () => {
+      this.newTokenListeners = this.newTokenListeners.filter(l => l !== callback);
     };
   }
 

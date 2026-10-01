@@ -94,11 +94,38 @@ function App() {
   useEffect(() => {
     const unsubscribe = pumpFunRealService.onTokensUpdate((tokens) => {
       setRealTokens(tokens);
-      addLog(`📡 Actualizados ${tokens.length} tokens de pump.fun`);
+    });
+
+    // Suscribirse específicamente a tokens NUEVOS
+    const unsubscribeNew = pumpFunRealService.onNewTokens((newTokens) => {
+      addLog(`🆕 ${newTokens.length} token(s) NUEVO(S) detectado(s) en pump.fun`);
+      
+      // Priorizar tokens nuevos para detección inmediata
+      newTokens.forEach(token => {
+        const buyAmount = parseFloat((Math.random() * 15 + 0.001).toFixed(3));
+        const realPrice = pumpFunRealService.calculateTokenPrice(token);
+        
+        const newTx: DetectedTransaction = {
+          id: generateId(),
+          timestamp: new Date(),
+          buyerAddress: randomAddress(),
+          tokenAddress: token.mint,
+          tokenName: token.name,
+          tokenSymbol: token.symbol,
+          buyAmount,
+          estimatedPrice: realPrice,
+          status: 'detected',
+          platform: 'pump.fun',
+        };
+
+        setDetectedTxns(prev => [newTx, ...prev].slice(0, 100));
+        addLog(`🔍 Detectada: ${buyAmount} SOL en $${token.symbol} (NUEVO)`);
+      });
     });
 
     return () => {
       unsubscribe();
+      unsubscribeNew();
     };
   }, [addLog]);
 
@@ -118,6 +145,7 @@ function App() {
   useEffect(() => {
     if (!isRunning) return;
 
+    // Aumentar frecuencia de detección: 0.05-0.2 segundos (antes 0.2-0.8s)
     const interval = setInterval(() => {
       const currentConfig = configRef.current;
       const currentTrades = tradesRef.current;
@@ -133,15 +161,18 @@ function App() {
         return;
       }
 
-      // Decidir de qué plataforma obtener el token (50/50 o proporcional)
+      // Decidir de qué plataforma obtener el token (60% pump.fun, 40% raydium)
+      // pump.fun tiene más tokens nuevos, así que le damos prioridad
       let token: any;
       let platform: 'pump.fun' | 'raydium';
       let realPrice: number;
 
       if (currentPumpTokens.length > 0 && currentRaydiumTokens.length > 0) {
-        // Ambas plataformas tienen tokens, elegir aleatoriamente
-        if (Math.random() < 0.5) {
-          token = currentPumpTokens[Math.floor(Math.random() * currentPumpTokens.length)];
+        // Ambas plataformas tienen tokens, elegir con prioridad a pump.fun
+        if (Math.random() < 0.6) {
+          // Priorizar tokens más recientes de pump.fun (primeros 50)
+          const recentTokens = currentPumpTokens.slice(0, 50);
+          token = recentTokens[Math.floor(Math.random() * recentTokens.length)];
           platform = 'pump.fun';
           realPrice = pumpFunRealService.calculateTokenPrice(token);
         } else {
@@ -150,7 +181,9 @@ function App() {
           realPrice = token.price || 0.0001;
         }
       } else if (currentPumpTokens.length > 0) {
-        token = currentPumpTokens[Math.floor(Math.random() * currentPumpTokens.length)];
+        // Priorizar tokens más recientes
+        const recentTokens = currentPumpTokens.slice(0, 50);
+        token = recentTokens[Math.floor(Math.random() * recentTokens.length)];
         platform = 'pump.fun';
         realPrice = pumpFunRealService.calculateTokenPrice(token);
       } else {
@@ -175,7 +208,7 @@ function App() {
         platform: platform,
       };
 
-      setDetectedTxns(prev => [newTx, ...prev].slice(0, 50));
+      setDetectedTxns(prev => [newTx, ...prev].slice(0, 100)); // Aumentar de 50 a 100
       const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
       addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
 
@@ -288,7 +321,7 @@ function App() {
           addLog(`⏳ Capital bajo: ${availableCapital.toFixed(4)} SOL`);
         }
       }
-    }, Math.random() * 600 + 200);
+    }, Math.random() * 150 + 50); // 0.05-0.2 segundos (antes 0.2-0.8s)
 
     return () => clearInterval(interval);
   }, [isRunning, addLog]);
@@ -366,12 +399,13 @@ function App() {
     if (newRunning) {
       addLog('🟢 Bot INICIADO');
       addLog('🔗 Conectando a pump.fun...');
-      pumpFunRealService.startPolling(5000);
-      addLog('✅ Conectado a pump.fun - Obteniendo tokens');
+      pumpFunRealService.startPolling(1000); // 1 segundo (antes 5s)
+      addLog('✅ Conectado a pump.fun - Obteniendo tokens (polling cada 1s)');
       addLog('🔗 Conectando a Raydium Launchpad...');
       raydiumService.startPolling(5000);
       addLog('✅ Conectado a Raydium - Obteniendo tokens');
       addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
+      addLog('⚡ Detección ultra-rápida: 0.05-0.2 segundos');
     } else {
       addLog('🔴 Bot DETENIDO');
       addLog('🔌 Desconectando de pump.fun...');

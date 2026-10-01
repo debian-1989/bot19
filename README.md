@@ -13,7 +13,10 @@ Bot de trading automatizado para tokens de [pump.fun](https://pump.fun) en Solan
 - **Indicador Visual**: Muestra de qué plataforma proviene cada token (🎯 pump.fun / 🌊 Raydium)
 
 ### 🎯 Estrategia de Trading
-- **Detección Ultra-Rápida**: Detecta oportunidades cada 0.2-0.8 segundos
+- **Detección Ultra-Rápida**: Detecta oportunidades cada 0.05-0.2 segundos
+- **Polling Acelerado**: Obtiene tokens nuevos cada 1 segundo (antes 5s)
+- **Detección de Tokens Nuevos**: Identifica automáticamente tokens recién creados
+- **Priorización de Tokens Recientes**: Enfoca el 60% de las detecciones en pump.fun
 - **Ejecución Instantánea**: Sin delays, entra inmediatamente cuando detecta una oportunidad
 - **Gestión de Capital Flexible**: Entra con cualquier cantidad de capital disponible
 - **Múltiples Posiciones Simultáneas**: Hasta 10 operaciones al mismo tiempo (configurable)
@@ -114,12 +117,17 @@ En el header verás dos badges:
 
 ## 📈 Cómo Funciona
 
-### 1. Detección
+### 1. Detección Ultra-Rápida
 ```
-Cada 0.2-0.8 segundos:
-- Obtiene tokens reales de pump.fun (🎯)
-- Obtiene tokens reales de Raydium Launchpad (🌊)
-- Combina ambas fuentes de tokens
+Cada 1 segundo (polling):
+- Obtiene 200 tokens más recientes de pump.fun (🎯)
+- Obtiene 200 tokens más recientes de Raydium Launchpad (🌊)
+- Detecta tokens NUEVOS automáticamente
+- Prioriza tokens nuevos para detección inmediata
+
+Cada 0.05-0.2 segundos (detección):
+- Selecciona token aleatorio (60% pump.fun, 40% raydium)
+- Prioriza los 50 tokens más recientes de pump.fun
 - Simula detección de compras
 - Evalúa si puede entrar
 - Muestra de qué plataforma proviene cada token
