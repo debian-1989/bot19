@@ -145,6 +145,8 @@ function App() {
   useEffect(() => {
     if (!isRunning) return;
 
+    console.log('[App] Detection useEffect started');
+
     // Aumentar frecuencia de detección: 0.05-0.2 segundos (antes 0.2-0.8s)
     const interval = setInterval(() => {
       const currentConfig = configRef.current;
@@ -153,11 +155,17 @@ function App() {
       const currentPumpTokens = tokensRef.current;
       const currentRaydiumTokens = raydiumTokensRef.current;
 
+      console.log('[App] Detection interval triggered', {
+        pumpTokens: currentPumpTokens.length,
+        raydiumTokens: currentRaydiumTokens.length,
+      });
+
       // Combinar tokens de ambas plataformas
       const totalTokens = currentPumpTokens.length + currentRaydiumTokens.length;
       
       // Si no hay tokens de ninguna plataforma, esperar
       if (totalTokens === 0) {
+        console.log('[App] No tokens available, waiting...');
         return;
       }
 
