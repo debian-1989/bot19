@@ -81,9 +81,18 @@ export default function LiveMonitor({ detectedTxns, isRunning }: LiveMonitorProp
                       {tx.timestamp.toLocaleTimeString()}
                     </td>
                     <td className="px-4 py-3">
-                      <div>
-                        <p className="font-semibold text-sm text-white">${tx.tokenSymbol}</p>
-                        <p className="text-xs text-gray-500">{tx.tokenName}</p>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <p className="font-semibold text-sm text-white">${tx.tokenSymbol}</p>
+                          <p className="text-xs text-gray-500">{tx.tokenName}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${
+                          tx.platform === 'pump.fun' 
+                            ? 'bg-blue-500/20 text-blue-400' 
+                            : 'bg-purple-500/20 text-purple-400'
+                        }`}>
+                          {tx.platform === 'pump.fun' ? '🎯 pump' : '🌊 ray'}
+                        </span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 font-mono">

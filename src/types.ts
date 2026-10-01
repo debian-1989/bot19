@@ -36,6 +36,7 @@ export interface DetectedTransaction {
   ourSellPrice?: number;
   profit?: number;
   profitPercent?: number;
+  platform: 'pump.fun' | 'raydium';
 }
 
 export interface Trade {

@@ -8,6 +8,7 @@ import TradeHistory from './components/TradeHistory';
 import WalletPanel from './components/WalletPanel';
 import TestingPanel from './components/TestingPanel';
 import { pumpFunRealService, PumpFunToken } from './services/pumpfun-real';
+import { raydiumService, RaydiumToken } from './services/raydium';
 
 const defaultConfig: BotConfig = {
   rpcEndpoint: 'https://api.mainnet-beta.solana.com',
@@ -68,29 +69,32 @@ function App() {
   const [solBalance, setSolBalance] = useState(1);
   const [logs, setLogs] = useState<string[]>([]);
   const [realTokens, setRealTokens] = useState<PumpFunToken[]>([]);
+  const [raydiumTokens, setRaydiumTokens] = useState<RaydiumToken[]>([]);
   
   const configRef = useRef(config);
   const tradesRef = useRef(trades);
   const solBalanceRef = useRef(solBalance);
   const tokensRef = useRef<PumpFunToken[]>([]);
+  const raydiumTokensRef = useRef<RaydiumToken[]>([]);
   
   useEffect(() => {
     configRef.current = config;
     tradesRef.current = trades;
     solBalanceRef.current = solBalance;
     tokensRef.current = realTokens;
-  }, [config, trades, solBalance, realTokens]);
+    raydiumTokensRef.current = raydiumTokens;
+  }, [config, trades, solBalance, realTokens, raydiumTokens]);
 
   const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
     setLogs(prev => [`[${timestamp}] ${message}`, ...prev].slice(0, 100));
   }, []);
 
-  // Suscribirse a actualizaciones de tokens reales
+  // Suscribirse a actualizaciones de tokens reales de pump.fun
   useEffect(() => {
     const unsubscribe = pumpFunRealService.onTokensUpdate((tokens) => {
       setRealTokens(tokens);
-      addLog(`📡 Actualizados ${tokens.length} tokens reales de pump.fun`);
+      addLog(`📡 Actualizados ${tokens.length} tokens de pump.fun`);
     });
 
     return () => {
@@ -98,7 +102,19 @@ function App() {
     };
   }, [addLog]);
 
-  // Simular detección de compras usando tokens reales
+  // Suscribirse a actualizaciones de tokens de Raydium
+  useEffect(() => {
+    const unsubscribe = raydiumService.onTokensUpdate((tokens) => {
+      setRaydiumTokens(tokens);
+      addLog(`🌊 Actualizados ${tokens.length} tokens de Raydium Launchpad`);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [addLog]);
+
+  // Simular detección de compras usando tokens reales de pump.fun y Raydium
   useEffect(() => {
     if (!isRunning) return;
 
@@ -106,21 +122,45 @@ function App() {
       const currentConfig = configRef.current;
       const currentTrades = tradesRef.current;
       const currentBalance = solBalanceRef.current;
-      const currentTokens = tokensRef.current;
+      const currentPumpTokens = tokensRef.current;
+      const currentRaydiumTokens = raydiumTokensRef.current;
 
-      // Si no hay tokens reales, esperar
-      if (currentTokens.length === 0) {
+      // Combinar tokens de ambas plataformas
+      const totalTokens = currentPumpTokens.length + currentRaydiumTokens.length;
+      
+      // Si no hay tokens de ninguna plataforma, esperar
+      if (totalTokens === 0) {
         return;
       }
 
-      // Seleccionar un token real aleatorio
-      const token = currentTokens[Math.floor(Math.random() * currentTokens.length)];
+      // Decidir de qué plataforma obtener el token (50/50 o proporcional)
+      let token: any;
+      let platform: 'pump.fun' | 'raydium';
+      let realPrice: number;
+
+      if (currentPumpTokens.length > 0 && currentRaydiumTokens.length > 0) {
+        // Ambas plataformas tienen tokens, elegir aleatoriamente
+        if (Math.random() < 0.5) {
+          token = currentPumpTokens[Math.floor(Math.random() * currentPumpTokens.length)];
+          platform = 'pump.fun';
+          realPrice = pumpFunRealService.calculateTokenPrice(token);
+        } else {
+          token = currentRaydiumTokens[Math.floor(Math.random() * currentRaydiumTokens.length)];
+          platform = 'raydium';
+          realPrice = token.price || 0.0001;
+        }
+      } else if (currentPumpTokens.length > 0) {
+        token = currentPumpTokens[Math.floor(Math.random() * currentPumpTokens.length)];
+        platform = 'pump.fun';
+        realPrice = pumpFunRealService.calculateTokenPrice(token);
+      } else {
+        token = currentRaydiumTokens[Math.floor(Math.random() * currentRaydiumTokens.length)];
+        platform = 'raydium';
+        realPrice = token.price || 0.0001;
+      }
       
       // Simular una compra (monto aleatorio entre 0.001 y 15 SOL)
       const buyAmount = parseFloat((Math.random() * 15 + 0.001).toFixed(3));
-      
-      // Calcular precio real del token
-      const realPrice = pumpFunRealService.calculateTokenPrice(token);
       
       const newTx: DetectedTransaction = {
         id: generateId(),
@@ -132,10 +172,12 @@ function App() {
         buyAmount,
         estimatedPrice: realPrice,
         status: 'detected',
+        platform: platform,
       };
 
       setDetectedTxns(prev => [newTx, ...prev].slice(0, 50));
-      addLog(`🔍 Detectada: ${buyAmount} SOL en $${token.symbol} (${token.name})`);
+      const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
+      addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
 
       const openTradesCount = currentTrades.filter((t: Trade) => t.status === 'open').length;
       const capitalInUse = currentTrades.filter((t: Trade) => t.status === 'open').reduce((sum: number, t: Trade) => sum + t.buyAmount, 0);
@@ -325,11 +367,17 @@ function App() {
       addLog('🟢 Bot INICIADO');
       addLog('🔗 Conectando a pump.fun...');
       pumpFunRealService.startPolling(5000);
-      addLog('✅ Conectado a pump.fun - Obteniendo tokens reales');
+      addLog('✅ Conectado a pump.fun - Obteniendo tokens');
+      addLog('🔗 Conectando a Raydium Launchpad...');
+      raydiumService.startPolling(5000);
+      addLog('✅ Conectado a Raydium - Obteniendo tokens');
+      addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
     } else {
       addLog('🔴 Bot DETENIDO');
       addLog('🔌 Desconectando de pump.fun...');
       pumpFunRealService.stopPolling();
+      addLog('🔌 Desconectando de Raydium...');
+      raydiumService.stopPolling();
     }
   };
 
@@ -346,10 +394,19 @@ function App() {
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${isRunning ? 'bg-green-500/20 text-green-400 animate-pulse' : 'bg-red-500/20 text-red-400'}`}>
               {isRunning ? '● EJECUTANDO' : '● DETENIDO'}
             </span>
-            {realTokens.length > 0 && (
-              <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400">
-                📡 {realTokens.length} tokens reales
-              </span>
+            {(realTokens.length > 0 || raydiumTokens.length > 0) && (
+              <div className="flex gap-2">
+                {realTokens.length > 0 && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400">
+                    🎯 {realTokens.length} pump.fun
+                  </span>
+                )}
+                {raydiumTokens.length > 0 && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/20 text-purple-400">
+                    🌊 {raydiumTokens.length} raydium
+                  </span>
+                )}
+              </div>
             )}
           </div>
           

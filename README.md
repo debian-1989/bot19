@@ -4,11 +4,13 @@ Bot de trading automatizado para tokens de [pump.fun](https://pump.fun) en Solan
 
 ## 🚀 Características
 
-### ✅ Conexión Real a Pump.fun
-- **Tokens Reales**: Obtiene tokens directamente de la API pública de pump.fun
-- **Precios Reales**: Calcula precios basados en las reservas virtuales de cada bonding curve
+### ✅ Conexión Real a Múltiples Plataformas
+- **Pump.fun**: Obtiene tokens directamente de la API pública de pump.fun
+- **Raydium Launchpad**: Obtiene tokens nuevos del launchpad de Raydium
+- **Doble Fuente de Oportunidades**: El bot monitorea ambas plataformas simultáneamente
+- **Precios Reales**: Calcula precios basados en las reservas reales de cada plataforma
 - **Actualización en Tiempo Real**: Polling cada 5 segundos para obtener los tokens más recientes
-- **Sin Tokens Simulados**: A diferencia de versiones anteriores, este bot trabaja con datos reales
+- **Indicador Visual**: Muestra de qué plataforma proviene cada token (🎯 pump.fun / 🌊 Raydium)
 
 ### 🎯 Estrategia de Trading
 - **Detección Ultra-Rápida**: Detecta oportunidades cada 0.2-0.8 segundos
@@ -62,6 +64,30 @@ npm run build
 - NUNCA compartas tu clave privada
 - La clave se almacena solo localmente en tu navegador
 
+## 🌊 Integración con Raydium Launchpad
+
+### ¿Qué es Raydium Launchpad?
+Raydium Launchpad (también conocido como LaunchLab) es la plataforma de lanzamiento de tokens de Raydium, uno de los DEX más grandes de Solana. Es competencia directa de pump.fun.
+
+### Ventajas de usar Raydium Launchpad:
+- **Liquidez Real**: Los tokens tienen liquidez real desde el inicio
+- **Menos Rugpulls**: Al tener liquidez bloqueada, es más difícil que los creadores huyan con el dinero
+- **Tokens de Calidad**: Generalmente hay más proyectos serios que en pump.fun
+- **85 SOL para Graduar**: Los tokens necesitan levantar 85 SOL para completar la curva de bonding
+
+### Cómo funciona la integración:
+1. **Conexión Automática**: Al iniciar el bot, se conecta a ambas plataformas
+2. **Detección Dual**: Detecta tokens de pump.fun Y Raydium simultáneamente
+3. **Indicador Visual**: Cada token muestra de qué plataforma proviene
+   - 🎯 = pump.fun
+   - 🌊 = Raydium Launchpad
+4. **Distribución 50/50**: El bot alterna entre ambas plataformas para maximizar oportunidades
+
+### Estadísticas en Tiempo Real:
+En el header verás dos badges:
+- `🎯 X pump.fun` - Tokens detectados de pump.fun
+- `🌊 X raydium` - Tokens detectados de Raydium
+
 ## 🎮 Uso
 
 ### Modo Simulación (Recomendado para empezar)
@@ -91,9 +117,12 @@ npm run build
 ### 1. Detección
 ```
 Cada 0.2-0.8 segundos:
-- Obtiene tokens reales de pump.fun
+- Obtiene tokens reales de pump.fun (🎯)
+- Obtiene tokens reales de Raydium Launchpad (🌊)
+- Combina ambas fuentes de tokens
 - Simula detección de compras
 - Evalúa si puede entrar
+- Muestra de qué plataforma proviene cada token
 ```
 
 ### 2. Entrada
@@ -123,8 +152,9 @@ Cuando se cumple alguna condición:
 - Ganancia después de X segundos
 ```
 
-## 🔧 API de Pump.fun
+## 🔧 APIs Utilizadas
 
+### Pump.fun API
 El bot utiliza la API pública de pump.fun:
 
 ```typescript
@@ -134,6 +164,32 @@ GET https://frontend-api-v2.pump.fun/coins/latest-metadatas
 // Calcular precio real
 precio = virtual_sol_reserves / virtual_token_reserves
 ```
+
+### Raydium API v3
+El bot también se conecta a Raydium Launchpad:
+
+```typescript
+// Obtener pools nuevos
+GET https://api-v3.raydium.io/pools/info/list?poolType=all&poolSortField=default&sortType=desc
+
+// Calcular precio real
+precio = pool.price (directo de la API)
+```
+
+### ¿Por qué ambas plataformas?
+
+**Pump.fun:**
+- Tokens en bonding curve (pre-graduation)
+- Mayor volatilidad, mayor potencial de ganancias
+- Tokens muy nuevos, menos competencia
+
+**Raydium Launchpad:**
+- Tokens con liquidez real desde el inicio
+- Mayor estabilidad, menor riesgo de rugpulls
+- Competencia directa con pump.fun
+- Más oportunidades de detección
+
+**Combinar ambas = 2x más oportunidades de trading**
 
 ## ⚠️ Advertencias
 
