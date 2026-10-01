@@ -1,0 +1,70 @@
+export interface BotConfig {
+  rpcEndpoint: string;
+  walletAddress: string;
+  privateKey: string;
+  tradeAmount: number;
+  maxConcurrentTrades: number;
+  takeProfitMultiplier: number;
+  stopLossPercent: number;
+  trailingStopPercent: number;
+  trailingStopActivation: number;
+  timeBasedExit: number;
+  maxLossPerTrade: number;
+  profitTimeExit: number;
+  minDetectedBuySize: number;
+  maxDetectedBuySize: number;
+  slippage: number;
+  priorityFee: number;
+  autoSnipe: boolean;
+  minLiquidity: number;
+  maxMarketCap: number;
+  gasStrategy: 'standard' | 'fast' | 'instant';
+  jitoBundle: boolean;
+}
+
+export interface DetectedTransaction {
+  id: string;
+  timestamp: Date;
+  buyerAddress: string;
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  buyAmount: number;
+  estimatedPrice: number;
+  status: 'detected' | 'sniped' | 'sold' | 'missed' | 'failed';
+  ourBuyPrice?: number;
+  ourSellPrice?: number;
+  profit?: number;
+  profitPercent?: number;
+}
+
+export interface Trade {
+  id: string;
+  timestamp: Date;
+  tokenAddress: string;
+  tokenName: string;
+  tokenSymbol: string;
+  buyAmount: number;
+  buyPrice: number;
+  sellAmount?: number;
+  sellPrice?: number;
+  profit?: number;
+  profitPercent?: number;
+  status: 'open' | 'closed' | 'failed';
+  txHash?: string;
+}
+
+export interface BotStats {
+  totalTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  totalProfit: number;
+  winRate: number;
+  avgProfitPerTrade: number;
+  bestTrade: number;
+  worstTrade: number;
+  totalVolume: number;
+  activeSince: Date;
+}
+
+export type TabType = 'dashboard' | 'monitor' | 'config' | 'history' | 'wallet' | 'testing';
