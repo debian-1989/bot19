@@ -3,3 +3,9 @@ node_modules/
 dist/
 build/
 *.log
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+backend/.env
