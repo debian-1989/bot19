@@ -36,50 +36,19 @@ class PumpFunService {
   private listeners: ((tokens: PumpFunToken[]) => void)[] = [];
   private newTokenListeners: ((newTokens: PumpFunToken[]) => void)[] = [];
   private lastTokenIds: Set<string> = new Set();
-  private useFallback = false;
   
   // Sistema de reconexión
   private retryCount = 0;
   private maxRetries = 5;
-  private retryDelay = 1000; // 1 segundo inicial
-  private maxRetryDelay = 30000; // 30 segundos máximo
+  private retryDelay = 1000;
+  private maxRetryDelay = 30000;
   private consecutiveErrors = 0;
   private lastError: string | null = null;
   private isConnected = false;
 
   constructor() {}
 
-  // Generar tokens simulados como fallback
-  private generateFallbackTokens(count: number = 200): PumpFunToken[] {
-    const tokens: PumpFunToken[] = [];
-    const symbols = ['BONK', 'WIF', 'POPCAT', 'MYRO', 'WEN', 'BOME', 'SLERF', 'MEW', 'PNUT', 'ACT'];
-    
-    for (let i = 0; i < count; i++) {
-      const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-      const mint = `fallback_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      tokens.push({
-        mint,
-        name: `${symbol} Token`,
-        symbol,
-        description: `Fallback ${symbol} token`,
-        image_uri: '',
-        created_timestamp: Date.now() - Math.random() * 3600000,
-        raydium_pool: null,
-        complete: false,
-        virtual_sol_reserves: Math.random() * 100 + 10,
-        virtual_token_reserves: Math.random() * 1000000000 + 100000000,
-        total_supply: 1000000000,
-        market_cap: Math.random() * 1000000,
-        king_of_the_hill_timestamp: 0,
-        usd_market_cap: Math.random() * 100000000,
-      });
-    }
-    
-    return tokens;
-  }
-
-  // Obtener tokens recientes de pump.fun con reconexión automática
+  // Obtener tokens recientes de pump.fun
   async fetchLatestTokens(limit: number = 200): Promise<PumpFunToken[]> {
     try {
       const fetchUrl = `${this.baseUrl}/tokens?limit=${limit}&offset=0`;
@@ -93,7 +62,7 @@ class PumpFunService {
       
       // Crear un AbortController para timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos timeout
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 segundos timeout
       
       const response = await fetch(fetchUrl, {
         method: 'GET',
@@ -120,13 +89,6 @@ class PumpFunService {
       const data = responseData.data;
       console.log('[PumpFun] Tokens received:', data.length);
       
-      // Resetear contadores de error si fue exitoso
-      this.consecutiveErrors = 0;
-      this.retryCount = 0;
-      this.retryDelay = 1000;
-      this.isConnected = true;
-      this.lastError = null;
-      
       // Detectar tokens NUEVOS
       const newTokens: PumpFunToken[] = [];
       const currentTokenIds = new Set<string>(data.map((t: PumpFunToken) => String(t.mint)));
@@ -142,7 +104,13 @@ class PumpFunService {
       this.lastTokenIds = currentTokenIds;
       this.tokens = data;
       this.lastFetch = Date.now();
-      this.useFallback = false;
+      
+      // Resetear contadores de error si fue exitoso
+      this.consecutiveErrors = 0;
+      this.retryCount = 0;
+      this.retryDelay = 1000;
+      this.isConnected = true;
+      this.lastError = null;
       
       // Notificar a los listeners de tokens nuevos
       if (newTokens.length > 0) {
@@ -178,76 +146,46 @@ class PumpFunService {
         return this.fetchLatestTokens(limit);
       }
       
-      // Si después de todos los retries sigue fallando, usar fallback
-      console.error('[PumpFun] Max retries reached, using fallback');
-      
-      // Si falla la API real, usar tokens simulados
-      if (!this.useFallback || this.tokens.length === 0) {
-        console.log('[PumpFun] Generating fallback tokens');
-        this.useFallback = true;
-        const fallbackTokens = this.generateFallbackTokens(limit);
-        
-        // Detectar tokens "nuevos" en el fallback
-        const newTokens: PumpFunToken[] = [];
-        const currentTokenIds = new Set<string>(fallbackTokens.map(t => String(t.mint)));
-        
-        fallbackTokens.forEach(token => {
-          if (!this.lastTokenIds.has(String(token.mint))) {
-            newTokens.push(token);
-          }
-        });
-        
-        this.lastTokenIds = currentTokenIds;
-        this.tokens = fallbackTokens;
-        this.lastFetch = Date.now();
-        
-        // Notificar a los listeners
-        if (newTokens.length > 0) {
-          console.log('[PumpFun] Notifying fallback new token listeners:', newTokens.length);
-          this.newTokenListeners.forEach(listener => listener(newTokens));
-        }
-        
-        console.log('[PumpFun] Notifying fallback general listeners');
-        this.listeners.forEach(listener => listener(fallbackTokens));
-        
-        return fallbackTokens;
-      }
-      
-      return this.tokens;
+      // Si después de todos los retries sigue fallando, lanzar error
+      console.error('[PumpFun] Max retries reached, connection failed');
+      throw error;
     }
   }
 
-  // Obtener trades recientes de un token específico
+  // Obtener trades de un token específico
   async fetchTokenTrades(mint: string, limit: number = 20): Promise<PumpFunTrade[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/coins/${mint}/trades?limit=${limit}&offset=0`);
+      const fetchUrl = `${this.baseUrl}/token/${mint}/trades?limit=${limit}`;
+      
+      console.log('[PumpFun] Fetching trades for token:', mint);
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      const response = await fetch(fetchUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error(`Error fetching trades for ${mint}:`, error);
-      return [];
-    }
-  }
-
-  // Obtener información detallada de un token
-  async fetchTokenInfo(mint: string): Promise<PumpFunToken | null> {
-    try {
-      const response = await fetch(`${this.baseUrl}/coins/${mint}`);
+      const responseData = await response.json();
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!responseData.success) {
+        throw new Error(`Backend error: ${responseData.error}`);
       }
       
-      const data = await response.json();
-      return data;
+      return responseData.data;
     } catch (error) {
-      console.error(`Error fetching token info for ${mint}:`, error);
-      return null;
+      console.error('[PumpFun] Error fetching trades:', error);
+      throw error;
     }
   }
 
@@ -258,7 +196,7 @@ class PumpFunService {
   }
 
   // Iniciar polling automático
-  startPolling(intervalMs: number = 5000) {
+  startPolling(intervalMs: number = 1000) {
     console.log('[PumpFun] Starting polling...', { intervalMs, isPolling: this.isPolling });
     
     if (this.isPolling) {
@@ -314,19 +252,18 @@ class PumpFunService {
   }
 
   // Obtener estado de conexión
-  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number; isFallback: boolean; isConnected: boolean; consecutiveErrors: number; lastError: string | null } {
+  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number; isConnected: boolean; consecutiveErrors: number; lastError: string | null } {
     return {
       connected: this.isPolling,
       lastUpdate: this.lastFetch,
       tokenCount: this.tokens.length,
-      isFallback: this.useFallback,
       isConnected: this.isConnected,
       consecutiveErrors: this.consecutiveErrors,
       lastError: this.lastError
     };
   }
 
-  // Resetear estado de conexión (útil para reconexión manual)
+  // Resetear estado de conexión
   resetConnection() {
     console.log('[PumpFun] Resetting connection state');
     this.consecutiveErrors = 0;

@@ -80,7 +80,7 @@ export default function ConnectionStatus() {
           isConnected: pumpStatus.isConnected,
           consecutiveErrors: pumpStatus.consecutiveErrors,
           lastError: pumpStatus.lastError,
-          mode: pumpStatus.tokenCount > 0 ? (pumpStatus.isFallback ? 'fallback' : 'real') : 'disconnected',
+          mode: pumpStatus.tokenCount > 0 ? 'real' : 'disconnected',
         },
         raydium: {
           ...prev.raydium,
@@ -91,7 +91,7 @@ export default function ConnectionStatus() {
           isConnected: rayStatus.isConnected,
           consecutiveErrors: rayStatus.consecutiveErrors,
           lastError: rayStatus.lastError,
-          mode: rayStatus.tokenCount > 0 ? (rayStatus.isFallback ? 'fallback' : 'real') : 'disconnected',
+          mode: rayStatus.tokenCount > 0 ? 'real' : 'disconnected',
         },
       }));
     }, 1000);
@@ -157,7 +157,7 @@ export default function ConnectionStatus() {
         pumpfun: {
           ...prev.pumpfun,
           connected: tokens.length > 0,
-          mode: pumpFunRealService.getStatus().isFallback ? 'fallback' : 'real',
+          mode: 'real',
           error: undefined,
         },
       }));
@@ -183,7 +183,7 @@ export default function ConnectionStatus() {
         raydium: {
           ...prev.raydium,
           connected: pools.length > 0,
-          mode: raydiumService.getStatus().isFallback ? 'fallback' : 'real',
+          mode: 'real',
           error: undefined,
         },
       }));
