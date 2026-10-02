@@ -252,11 +252,12 @@ class RaydiumService {
   }
 
   // Obtener estado de conexión
-  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number } {
+  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number; isFallback: boolean } {
     return {
       connected: this.isPolling,
       lastUpdate: this.lastFetch,
-      tokenCount: this.tokens.length
+      tokenCount: this.tokens.length,
+      isFallback: this.useFallback
     };
   }
 }

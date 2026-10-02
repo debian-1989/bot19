@@ -7,6 +7,7 @@ import BotConfigPanel from './components/BotConfigPanel';
 import TradeHistory from './components/TradeHistory';
 import WalletPanel from './components/WalletPanel';
 import TestingPanel from './components/TestingPanel';
+import ConnectionStatus from './components/ConnectionStatus';
 import { pumpFunRealService, PumpFunToken } from './services/pumpfun-real';
 import { raydiumService, RaydiumToken } from './services/raydium';
 
@@ -488,6 +489,9 @@ function App() {
           )}
           {activeTab === 'testing' && (
             <TestingPanel />
+          )}
+          {activeTab === 'connections' && (
+            <ConnectionStatus />
           )}
         </div>
       </main>

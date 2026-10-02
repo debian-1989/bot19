@@ -11,6 +11,7 @@ const menuItems: { id: TabType; label: string; icon: string }[] = [
   { id: 'dashboard', label: 'Panel Principal', icon: '📊' },
   { id: 'monitor', label: 'Monitor en Vivo', icon: '📡' },
   { id: 'testing', label: 'Pruebas y Simulación', icon: '🧪' },
+  { id: 'connections', label: 'Estado de Conexiones', icon: '🔌' },
   { id: 'config', label: 'Configuración', icon: '⚙️' },
   { id: 'history', label: 'Historial de Operaciones', icon: '📜' },
   { id: 'wallet', label: 'Billetera', icon: '💰' },

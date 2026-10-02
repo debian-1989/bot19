@@ -68,4 +68,4 @@ export interface BotStats {
   activeSince: Date;
 }
 
-export type TabType = 'dashboard' | 'monitor' | 'config' | 'history' | 'wallet' | 'testing';
+export type TabType = 'dashboard' | 'monitor' | 'config' | 'history' | 'wallet' | 'testing' | 'connections';
