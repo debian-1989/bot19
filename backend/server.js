@@ -1,488 +1,396 @@
+/**
+ * Servidor Principal del Bot
+ * 
+ * Arquitectura modular con:
+ * - Configuración centralizada y validada
+ * - Conexión Solana con health checks
+ * - Detector on-chain de Pump.fun
+ * - Health checks reales
+ * - Paper trading por defecto
+ */
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
-const { Connection, PublicKey } = require('@solana/web3.js');
+const { getConfig } = require('./src/config');
+const { getConnectionManager } = require('./src/solana/connection');
+const { getPumpFunDetector } = require('./src/detectors/pumpfun');
+
+// Validar configuración al inicio
+let config;
+try {
+  config = getConfig();
+} catch (error) {
+  console.error('\n❌ Error de configuración:', error.message);
+  console.error('Copia backend/.env.example a backend/.env y completa los valores\n');
+  process.exit(1);
+}
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
-// Configuración
-app.use(cors());
+// Middleware
+app.use(cors({
+  origin: config.corsOrigins,
+  credentials: true
+}));
 app.use(express.json());
 
-// Conexión a Solana con Helius
-const solanaConnection = new Connection(
-  process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-  'confirmed'
-);
-
-// Cache simple
-const cache = new Map();
-const CACHE_DURATION = 2000;
-
-function getCachedData(key) {
-  const cached = cache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    return cached.data;
+// Request logging
+app.use((req, res, next) => {
+  if (config.debug) {
+    console.log(`[HTTP] ${req.method} ${req.path}`);
   }
-  return null;
-}
+  next();
+});
 
-function setCacheData(key, data) {
-  cache.set(key, {
-    data,
+// ============================================
+// SERVICIOS GLOBALES
+// ============================================
+
+let connectionManager;
+let pumpFunDetector;
+
+// ============================================
+// ENDPOINTS DE HEALTH CHECK
+// ============================================
+
+/**
+ * Health check completo del sistema
+ * Verifica TODOS los componentes independientemente
+ */
+app.get('/api/health', async (req, res) => {
+  try {
+    const health = {
+      status: 'ok',
+      timestamp: Date.now(),
+      uptime: process.uptime(),
+      tradingMode: config.tradingMode,
+      liveTradingEnabled: config.enableLiveTrading,
+      components: {}
+    };
+
+    // Verificar conexión Solana
+    if (connectionManager) {
+      const solanaStatus = connectionManager.getStatus();
+      health.components.solana = {
+        httpConnected: solanaStatus.httpConnected,
+        lastSlot: solanaStatus.lastSlot,
+        latencyMs: solanaStatus.latencyMs,
+        lastHealthCheck: solanaStatus.lastHealthCheck,
+        usingFallback: solanaStatus.usingFallback
+      };
+    } else {
+      health.components.solana = { httpConnected: false, error: 'Not initialized' };
+    }
+
+    // Verificar detector Pump.fun
+    if (pumpFunDetector) {
+      const detectorStatus = pumpFunDetector.getStatus();
+      health.components.pumpFunDetector = {
+        isListening: detectorStatus.isListening,
+        lastProcessedSlot: detectorStatus.lastProcessedSlot,
+        eventsProcessed: detectorStatus.metrics.eventsProcessed,
+        lastEventAt: detectorStatus.metrics.lastEventAt
+      };
+    } else {
+      health.components.pumpFunDetector = { isListening: false, error: 'Not initialized' };
+    }
+
+    // Determinar estado general
+    const allHealthy = 
+      health.components.solana.httpConnected &&
+      health.components.pumpFunDetector.isListening;
+
+    health.status = allHealthy ? 'ok' : 'degraded';
+    health.healthy = allHealthy;
+
+    res.json(health);
+  } catch (error) {
+    console.error('[Health] Error:', error.message);
+    res.status(500).json({
+      status: 'error',
+      error: error.message,
+      timestamp: Date.now()
+    });
+  }
+});
+
+/**
+ * Health check detallado para diagnóstico
+ */
+app.get('/api/health/detailed', async (req, res) => {
+  try {
+    const detailed = {
+      timestamp: Date.now(),
+      config: config.toSafeObject(),
+      solana: connectionManager ? connectionManager.getStatus() : null,
+      pumpFunDetector: pumpFunDetector ? pumpFunDetector.getStatus() : null,
+      memory: process.memoryUsage(),
+      uptime: process.uptime()
+    };
+
+    res.json(detailed);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ENDPOINTS DE DIAGNÓSTICO
+// ============================================
+
+app.get('/api/diagnose', async (req, res) => {
+  try {
+    const diagnosis = {
+      timestamp: Date.now(),
+      config: {
+        tradingMode: config.tradingMode,
+        liveTrading: config.enableLiveTrading,
+        rpcConfigured: !!config.solanaRpcUrl,
+        walletConfigured: !!config.walletPrivateKey
+      },
+      solana: {
+        connected: false,
+        slot: null,
+        latency: null,
+        error: null
+      },
+      pumpFun: {
+        listening: false,
+        eventsProcessed: 0,
+        lastEventAt: null,
+        error: null
+      }
+    };
+
+    // Diagnosticar Solana
+    if (connectionManager) {
+      try {
+        const status = connectionManager.getStatus();
+        diagnosis.solana.connected = status.httpConnected;
+        diagnosis.solana.slot = status.lastSlot;
+        diagnosis.solana.latency = status.latencyMs;
+      } catch (error) {
+        diagnosis.solana.error = error.message;
+      }
+    }
+
+    // Diagnosticar Pump.fun detector
+    if (pumpFunDetector) {
+      try {
+        const status = pumpFunDetector.getStatus();
+        diagnosis.pumpFun.listening = status.isListening;
+        diagnosis.pumpFun.eventsProcessed = status.metrics.eventsProcessed;
+        diagnosis.pumpFun.lastEventAt = status.metrics.lastEventAt;
+      } catch (error) {
+        diagnosis.pumpFun.error = error.message;
+      }
+    }
+
+    res.json(diagnosis);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ENDPOINTS DE ESTADÍSTICAS
+// ============================================
+
+app.get('/api/stats', (req, res) => {
+  try {
+    const stats = {
+      timestamp: Date.now(),
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      tradingMode: config.tradingMode,
+      liveTrading: config.enableLiveTrading
+    };
+
+    if (pumpFunDetector) {
+      stats.pumpFunMetrics = pumpFunDetector.getMetrics();
+    }
+
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ENDPOINTS DE CONFIGURACIÓN (READ-ONLY)
+// ============================================
+
+app.get('/api/config', (req, res) => {
+  // NO exponer información sensible
+  res.json({
+    tradingMode: config.tradingMode,
+    liveTradingEnabled: config.enableLiveTrading,
+    maxConcurrentTrades: config.maxConcurrentTrades,
+    tradeAmount: config.tradeAmount,
+    takeProfitMultiplier: config.takeProfitMultiplier,
+    stopLossPercent: config.stopLossPercent,
+    // NO exponer: walletPrivateKey, API keys, etc.
+  });
+});
+
+// ============================================
+// ENDPOINTS AUXILIARES (COMPATIBILIDAD)
+// ============================================
+
+// Mantener endpoints antiguos para compatibilidad con frontend existente
+// Pero marcarlos como auxiliares/deprecated
+
+app.get('/api/pumpfun/tokens', async (req, res) => {
+  console.warn('[API] /api/pumpfun/tokens es AUXILIAR. Usa detección on-chain en su lugar.');
+  
+  // Este endpoint mantiene compatibilidad pero NO es la fuente principal
+  // En el futuro, debería obtener datos del detector on-chain
+  
+  res.json({
+    success: true,
+    data: [],
+    count: 0,
+    warning: 'Este endpoint es auxiliar. La detección real es on-chain via WebSocket.',
     timestamp: Date.now()
   });
+});
+
+app.get('/api/raydium/pools', async (req, res) => {
+  console.warn('[API] /api/raydium/pools es AUXILIAR.');
+  
+  res.json({
+    success: true,
+    data: [],
+    count: 0,
+    warning: 'Este endpoint es auxiliar. Implementación pendiente.',
+    timestamp: Date.now()
+  });
+});
+
+// ============================================
+// INICIALIZACIÓN
+// ============================================
+
+async function initializeServices() {
+  console.log('\n🚀 Iniciando servicios...\n');
+
+  // 1. Inicializar conexión Solana
+  try {
+    console.log('[Init] Conectando a Solana...');
+    connectionManager = getConnectionManager();
+    await connectionManager.initialize();
+    console.log('[Init] ✅ Solana conectado\n');
+  } catch (error) {
+    console.error('[Init] ❌ Error conectando a Solana:', error.message);
+    console.error('[Init] Verifica tu SOLANA_RPC_URL en .env\n');
+    process.exit(1);
+  }
+
+  // 2. Inicializar detector Pump.fun
+  try {
+    console.log('[Init] Iniciando detector Pump.fun...');
+    pumpFunDetector = getPumpFunDetector();
+    await pumpFunDetector.start();
+    console.log('[Init] ✅ Detector Pump.fun activo\n');
+    
+    // Registrar listener para nuevos tokens
+    pumpFunDetector.onNewToken((event) => {
+      console.log(`[Event] Nuevo token: ${event.symbol} (${event.mint})`);
+      // Aquí se conectaría la lógica de negocio
+    });
+  } catch (error) {
+    console.error('[Init] ❌ Error iniciando detector:', error.message);
+    console.error('[Init] El bot continuará sin detección on-chain\n');
+    // No es fatal, el bot puede continuar sin detector
+  }
+
+  console.log('✅ Todos los servicios inicializados\n');
 }
 
 // ============================================
-// ENDPOINTS DE PUMP.FUN (API REAL)
+// SHUTDOWN GRACEFUL
 // ============================================
 
-// Obtener tokens recientes de Pump.fun
-app.get('/api/pumpfun/tokens', async (req, res) => {
+async function shutdown(signal) {
+  console.log(`\n\n🛑 Recibida señal ${signal}. Cerrando servicios...\n`);
+
   try {
-    const limit = req.query.limit || 200;
-    const offset = req.query.offset || 0;
-    const cacheKey = `pumpfun_tokens_${limit}_${offset}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
+    if (pumpFunDetector) {
+      await pumpFunDetector.stop();
     }
-
-    console.log(`[Pump.fun] Fetching ${limit} tokens from offset ${offset}`);
     
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=${limit}&offset=${offset}&includeNsfw=false`,
-      {
-        timeout: 15000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status} ${response.statusText}`);
+    if (connectionManager) {
+      await connectionManager.shutdown();
     }
-
-    const data = await response.json();
-    setCacheData(cacheKey, data);
     
-    console.log(`[Pump.fun] ✅ Received ${data.length} tokens`);
-    
-    res.json({
-      success: true,
-      data: data,
-      count: data.length,
-      timestamp: Date.now()
-    });
+    console.log('✅ Servicios cerrados correctamente\n');
+    process.exit(0);
   } catch (error) {
-    console.error('[Pump.fun] ❌ Error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error('❌ Error cerrando servicios:', error.message);
+    process.exit(1);
   }
-});
+}
 
-// Obtener información de un token específico
-app.get('/api/pumpfun/token/:mint', async (req, res) => {
-  try {
-    const { mint } = req.params;
-    const cacheKey = `pumpfun_token_${mint}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
-    console.log(`[Pump.fun] Fetching token: ${mint}`);
-    
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/${mint}`,
-      {
-        timeout: 15000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    setCacheData(cacheKey, data);
-    
-    res.json({ success: true, data: data });
-  } catch (error) {
-    console.error('[Pump.fun] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Obtener trades de un token
-app.get('/api/pumpfun/token/:mint/trades', async (req, res) => {
-  try {
-    const { mint } = req.params;
-    const limit = req.query.limit || 20;
-    const cacheKey = `pumpfun_trades_${mint}_${limit}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
-    console.log(`[Pump.fun] Fetching trades for: ${mint}`);
-    
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/${mint}/trades?limit=${limit}`,
-      {
-        timeout: 15000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    setCacheData(cacheKey, data);
-    
-    res.json({ success: true, data: data, count: data.length });
-  } catch (error) {
-    console.error('[Pump.fun] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ============================================
-// ENDPOINTS DE RAYDIUM (API REAL)
+// START SERVER
 // ============================================
 
-// Obtener pools de Raydium
-app.get('/api/raydium/pools', async (req, res) => {
-  try {
-    const pageSize = req.query.pageSize || 50;
-    const page = req.query.page || 1;
-    const poolType = req.query.poolType || 'all';
-    const sortField = req.query.sortField || 'default';
-    const cacheKey = `raydium_pools_${pageSize}_${page}_${poolType}_${sortField}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
+async function start() {
+  console.log('\n' + '='.repeat(60));
+  console.log('🚀 PUMPFUN SNIPER BOT - BACKEND');
+  console.log('='.repeat(60) + '\n');
 
-    console.log(`[Raydium] Fetching ${pageSize} pools (page ${page})`);
-    
-    const response = await fetch(
-      `https://api-v3.raydium.io/pools/info/list?poolType=${poolType}&poolSortField=${sortField}&sortType=desc&pageSize=${pageSize}&page=${page}`,
-      {
-        timeout: 15000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
-    );
+  // Mostrar configuración (sin información sensible)
+  console.log('📋 Configuración:');
+  console.log(`   Modo: ${config.tradingMode}`);
+  console.log(`   Live trading: ${config.enableLiveTrading ? 'HABILITADO' : 'DESACTIVADO'}`);
+  console.log(`   RPC: ${config.solanaRpcUrl.substring(0, 50)}...`);
+  console.log(`   Puerto: ${config.port}`);
+  console.log('');
 
-    if (!response.ok) {
-      throw new Error(`Raydium API error: ${response.status} ${response.statusText}`);
-    }
+  // Inicializar servicios
+  await initializeServices();
 
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error('Raydium API returned unsuccessful response');
-    }
-    
-    setCacheData(cacheKey, data.data);
-    
-    console.log(`[Raydium] ✅ Received ${data.data?.data?.length || 0} pools`);
-    
-    res.json({
-      success: true,
-      data: data.data,
-      count: data.data?.data?.length || 0,
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    console.error('[Raydium] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Obtener información de un pool específico
-app.get('/api/raydium/pool/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const cacheKey = `raydium_pool_${id}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
-    console.log(`[Raydium] Fetching pool: ${id}`);
-    
-    const response = await fetch(
-      `https://api-v3.raydium.io/pools/info/ids?ids=${id}`,
-      {
-        timeout: 15000,
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error(`Raydium API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error('Raydium API returned unsuccessful response');
-    }
-    
-    setCacheData(cacheKey, data.data);
-    
-    res.json({ success: true, data: data.data });
-  } catch (error) {
-    console.error('[Raydium] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============================================
-// ENDPOINTS DE SOLANA RPC (API REAL)
-// ============================================
-
-// Obtener versión de Solana
-app.get('/api/solana/version', async (req, res) => {
-  try {
-    console.log('[Solana] Fetching version...');
-    const version = await solanaConnection.getVersion();
-    
-    console.log('[Solana] ✅ Connected successfully');
-    
-    res.json({
-      success: true,
-      data: version,
-      rpc: process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-      timestamp: Date.now()
-    });
-  } catch (error) {
-    console.error('[Solana] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Obtener balance de una cuenta
-app.get('/api/solana/balance/:address', async (req, res) => {
-  try {
-    const { address } = req.params;
-    const cacheKey = `solana_balance_${address}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
-    console.log(`[Solana] Fetching balance for: ${address}`);
-    
-    const pubkey = new PublicKey(address);
-    const balance = await solanaConnection.getBalance(pubkey);
-    
-    const balanceData = {
-      address: address,
-      lamports: balance,
-      sol: balance / 1e9
-    };
-    
-    setCacheData(cacheKey, balanceData);
-    
-    console.log(`[Solana] ✅ Balance: ${balanceData.sol} SOL`);
-    
-    res.json({ success: true, data: balanceData });
-  } catch (error) {
-    console.error('[Solana] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Obtener información de un token SPL
-app.get('/api/solana/token/:mint', async (req, res) => {
-  try {
-    const { mint } = req.params;
-    const cacheKey = `solana_token_${mint}`;
-    
-    const cached = getCachedData(cacheKey);
-    if (cached) {
-      return res.json({ success: true, data: cached, cached: true });
-    }
-
-    console.log(`[Solana] Fetching token info: ${mint}`);
-    
-    const mintPubkey = new PublicKey(mint);
-    const mintInfo = await solanaConnection.getParsedAccountInfo(mintPubkey);
-    
-    setCacheData(cacheKey, mintInfo);
-    
-    res.json({ success: true, data: mintInfo });
-  } catch (error) {
-    console.error('[Solana] ❌ Error:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============================================
-// ENDPOINTS DE UTILIDAD
-// ============================================
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'ok',
-    timestamp: Date.now(),
-    uptime: process.uptime(),
-    cache_size: cache.size
+  // Iniciar servidor
+  app.listen(PORT, () => {
+    console.log('='.repeat(60));
+    console.log(`✅ Servidor corriendo en http://localhost:${PORT}`);
+    console.log('='.repeat(60));
+    console.log('\n📡 Endpoints disponibles:');
+    console.log('   GET  /api/health          - Health check básico');
+    console.log('   GET  /api/health/detailed - Health check detallado');
+    console.log('   GET  /api/diagnose        - Diagnóstico completo');
+    console.log('   GET  /api/stats           - Estadísticas');
+    console.log('   GET  /api/config          - Configuración (safe)');
+    console.log('\n⚠️  Endpoints auxiliares (deprecated):');
+    console.log('   GET  /api/pumpfun/tokens  - AUXILIAR (usa on-chain)');
+    console.log('   GET  /api/raydium/pools   - AUXILIAR');
+    console.log('\n🔒 Seguridad:');
+    console.log(`   Trading mode: ${config.tradingMode}`);
+    console.log(`   Live trading: ${config.enableLiveTrading ? '⚠️  HABILITADO' : '✅ DESACTIVADO'}`);
+    console.log('');
   });
+}
+
+// Manejo de errores no capturados
+process.on('uncaughtException', (error) => {
+  console.error('\n❌ Error no capturado:', error);
+  console.error('Stack:', error.stack);
+  shutdown('UNCAUGHT_EXCEPTION');
 });
 
-// Diagnóstico completo
-app.get('/api/diagnose', async (req, res) => {
-  const results = {
-    timestamp: Date.now(),
-    pumpfun: { status: 'unknown', error: null },
-    raydium: { status: 'unknown', error: null },
-    solana: { status: 'unknown', error: null }
-  };
-
-  // Probar Pump.fun
-  try {
-    const response = await fetch('https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=1&offset=0', {
-      timeout: 10000,
-      headers: { 'Accept': 'application/json' }
-    });
-    if (response.ok) {
-      results.pumpfun = { status: 'ok' };
-    } else {
-      results.pumpfun = { status: 'error', error: `HTTP ${response.status}` };
-    }
-  } catch (error) {
-    results.pumpfun = { status: 'error', error: error.message };
-  }
-
-  // Probar Raydium
-  try {
-    const response = await fetch('https://api-v3.raydium.io/pools/info/list?poolType=all&poolSortField=default&sortType=desc&pageSize=1&page=1', {
-      timeout: 10000,
-      headers: { 'Accept': 'application/json' }
-    });
-    if (response.ok) {
-      results.raydium = { status: 'ok' };
-    } else {
-      results.raydium = { status: 'error', error: `HTTP ${response.status}` };
-    }
-  } catch (error) {
-    results.raydium = { status: 'error', error: error.message };
-  }
-
-  // Probar Solana
-  try {
-    await solanaConnection.getVersion();
-    results.solana = { status: 'ok' };
-  } catch (error) {
-    results.solana = { status: 'error', error: error.message };
-  }
-
-  res.json({ success: true, results: results });
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('\n❌ Promesa rechazada no manejada:', reason);
+  shutdown('UNHANDLED_REJECTION');
 });
 
-// Estadísticas del servidor
-app.get('/api/stats', (req, res) => {
-  res.json({
-    success: true,
-    stats: {
-      cache_size: cache.size,
-      uptime: process.uptime(),
-      memory_usage: process.memoryUsage(),
-      node_version: process.version
-    }
-  });
-});
-
-// Limpiar cache
-app.post('/api/cache/clear', (req, res) => {
-  cache.clear();
-  res.json({ success: true, message: 'Cache cleared' });
-});
-
-// ============================================
-// MANEJO DE ERRORES
-// ============================================
-
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: err.message
-  });
-});
-
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found'
-  });
-});
-
-// ============================================
-// INICIAR SERVIDOR
-// ============================================
-
-app.listen(PORT, () => {
-  console.log(`
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   🚀 PumpFun Sniper Bot Backend                           ║
-║                                                           ║
-║   ✅ Servidor corriendo en: http://localhost:${PORT}        ║
-║                                                           ║
-║   📡 APIs REALES conectadas:                              ║
-║   - Pump.fun: https://frontend-api-v2.pump.fun           ║
-║   - Raydium: https://api-v3.raydium.io                   ║
-║   - Solana RPC: ${process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'}
-║                                                           ║
-║   🔧 Endpoints disponibles:                               ║
-║   - GET  /api/pumpfun/tokens                              ║
-║   - GET  /api/pumpfun/token/:mint                         ║
-║   - GET  /api/pumpfun/token/:mint/trades                  ║
-║   - GET  /api/raydium/pools                               ║
-║   - GET  /api/raydium/pool/:id                            ║
-║   - GET  /api/solana/version                              ║
-║   - GET  /api/solana/balance/:address                     ║
-║   - GET  /api/solana/token/:mint                          ║
-║   - GET  /api/health                                      ║
-║   - GET  /api/diagnose                                    ║
-║   - GET  /api/stats                                       ║
-║   - POST /api/cache/clear                                 ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
-  `);
+// Iniciar
+start().catch(error => {
+  console.error('\n❌ Error fatal iniciando servidor:', error);
+  process.exit(1);
 });

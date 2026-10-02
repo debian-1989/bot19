@@ -1,304 +1,427 @@
-# 🎯 PumpFun Sniper Bot
+# 🎯 PumpFun Sniper Bot v2.0
 
-Bot de trading automatizado para tokens de [pump.fun](https://pump.fun) en Solana.
+Bot de trading de memecoins en Solana con **detección on-chain real** via WebSocket al programa Pump.fun.
 
-## 🚀 Características
+## ⚠️ Estado Actual
 
-### ✅ Conexión Real a Múltiples Plataformas
-- **Pump.fun**: Obtiene tokens directamente de la API pública de pump.fun
-- **Raydium Launchpad**: Obtiene tokens nuevos del launchpad de Raydium
-- **Doble Fuente de Oportunidades**: El bot monitorea ambas plataformas simultáneamente
-- **Precios Reales**: Calcula precios basados en las reservas reales de cada plataforma
-- **Actualización en Tiempo Real**: Polling cada 5 segundos para obtener los tokens más recientes
-- **Indicador Visual**: Muestra de qué plataforma proviene cada token (🎯 pump.fun / 🌊 Raydium)
+**Versión**: 2.0.0 (Arquitectura On-Chain)
 
-### 🎯 Estrategia de Trading
-- **Detección Ultra-Rápida**: Detecta oportunidades cada 0.05-0.2 segundos
-- **Polling Acelerado**: Obtiene tokens nuevos cada 1 segundo (antes 5s)
-- **Detección de Tokens Nuevos**: Identifica automáticamente tokens recién creados
-- **Priorización de Tokens Recientes**: Enfoca el 60% de las detecciones en pump.fun
-- **Ejecución Instantánea**: Sin delays, entra inmediatamente cuando detecta una oportunidad
-- **Gestión de Capital Flexible**: Entra con cualquier cantidad de capital disponible
-- **Múltiples Posiciones Simultáneas**: Hasta 10 operaciones al mismo tiempo (configurable)
+**Características Implementadas**:
+- ✅ Detección on-chain de tokens Pump.fun via WebSocket
+- ✅ Conexión Solana con health checks reales
+- ✅ Configuración centralizada y validada
+- ✅ Paper trading por defecto (seguro)
+- ✅ Claves privadas solo en backend
+- ✅ Script de diagnóstico completo
+- ✅ Documentación completa
 
-### 🛡️ Sistema de Salida Automático
-- **Take Profit**: Cierra automáticamente al alcanzar el multiplicador objetivo (2x por defecto)
-- **Stop Loss**: Protege contra pérdidas grandes (30% por defecto)
-- **Trailing Stop**: Bloquea ganancias siguiendo el precio hacia arriba
-- **Time-Based Exit**: Cierra posiciones después del tiempo configurado
-- **Profit Time Exit**: Cierra posiciones en ganancia después de X segundos
-- **Cierre Forzoso**: Monitor cada segundo para asegurar que NINGUNA posición quede abierta
+**Pendiente de Implementación**:
+- ⚠️ Ejecución real de trades (firma y envío)
+- ⚠️ Adaptadores completos para PumpSwap/Raydium
+- ⚠️ Sistema de backfill para slots perdidos
+- ⚠️ Tests unitarios exhaustivos
 
-### 📊 Monitoreo en Tiempo Real
-- Dashboard con estadísticas completas
-- Monitor en vivo de todas las transacciones
-- Historial detallado de operaciones
-- Gestión de capital visual
+## 🚀 Inicio Rápido
 
-## 🛠️ Instalación
+### 1. Clonar y Configurar
 
 ```bash
-# Instalar dependencias
+# Clonar repositorio
+git clone <repo-url>
+cd pumpfun-sniper-bot
+
+# Backend
+cd backend
+cp .env.example .env
+# Editar .env con tus valores (especialmente SOLANA_RPC_URL)
 npm install
 
-# Ejecutar en modo desarrollo
-npm run dev
-
-# Construir para producción
-npm run build
+# Frontend
+cd ..
+npm install
 ```
 
-## ⚙️ Configuración
+### 2. Configurar Variables de Entorno
 
-### Parámetros Principales
-
-- **Monto por Operación**: Cantidad fija de SOL para cada snipe (ej: 0.1 SOL)
-- **Máx. Operaciones Simultáneas**: Límite de posiciones abiertas (default: 10)
-- **Compra Mínima/Máxima a Detectar**: Rango de compras que el bot detectará
-- **Take Profit**: Multiplicador para tomar ganancias (2x = 100% de ganancia)
-- **Stop Loss**: Porcentaje máximo de pérdida permitida
-- **Tiempo Máximo de Posición**: Segundos antes de cerrar forzosamente
-- **Salida por Ganancia**: Segundos en ganancia antes de cerrar
-
-### Configuración de Billetera
-
-⚠️ **IMPORTANTE**: 
-- Usa una billetera dedicada con fondos limitados
-- NUNCA compartas tu clave privada
-- La clave se almacena solo localmente en tu navegador
-
-## 🌊 Integración con Raydium Launchpad
-
-### ¿Qué es Raydium Launchpad?
-Raydium Launchpad (también conocido como LaunchLab) es la plataforma de lanzamiento de tokens de Raydium, uno de los DEX más grandes de Solana. Es competencia directa de pump.fun.
-
-### Ventajas de usar Raydium Launchpad:
-- **Liquidez Real**: Los tokens tienen liquidez real desde el inicio
-- **Menos Rugpulls**: Al tener liquidez bloqueada, es más difícil que los creadores huyan con el dinero
-- **Tokens de Calidad**: Generalmente hay más proyectos serios que en pump.fun
-- **85 SOL para Graduar**: Los tokens necesitan levantar 85 SOL para completar la curva de bonding
-
-### Cómo funciona la integración:
-1. **Conexión Automática**: Al iniciar el bot, se conecta a ambas plataformas
-2. **Detección Dual**: Detecta tokens de pump.fun Y Raydium simultáneamente
-3. **Indicador Visual**: Cada token muestra de qué plataforma proviene
-   - 🎯 = pump.fun
-   - 🌊 = Raydium Launchpad
-4. **Distribución 50/50**: El bot alterna entre ambas plataformas para maximizar oportunidades
-
-### Estadísticas en Tiempo Real:
-En el header verás dos badges:
-- `🎯 X pump.fun` - Tokens detectados de pump.fun
-- `🌊 X raydium` - Tokens detectados de Raydium
-
-## 🎮 Uso
-
-### Modo Simulación (Recomendado para empezar)
-
-1. Ve a la pestaña **"Pruebas y Simulación"**
-2. Configura los parámetros de tu estrategia
-3. Haz clic en **"Iniciar Test"**
-4. Observa cómo el bot detecta tokens reales de pump.fun
-5. Analiza los resultados sin arriesgar fondos
-
-### Modo Real
-
-1. Ve a **"Billetera"** y configura tu wallet
-2. Ve a **"Configuración"** y ajusta los parámetros
-3. Haz clic en **"💾 Guardar Configuración"**
-4. Ve al **"Panel Principal"**
-5. Haz clic en **"▶ INICIAR BOT"**
-6. El bot comenzará a:
-   - Conectarse a pump.fun
-   - Obtener tokens reales
-   - Detectar oportunidades
-   - Ejecutar snipes automáticamente
-   - Cerrar posiciones según tu estrategia
-
-## 📈 Cómo Funciona
-
-### 1. Detección Ultra-Rápida
-```
-Cada 1 segundo (polling):
-- Obtiene 200 tokens más recientes de pump.fun (🎯)
-- Obtiene 200 tokens más recientes de Raydium Launchpad (🌊)
-- Detecta tokens NUEVOS automáticamente
-- Prioriza tokens nuevos para detección inmediata
-
-Cada 0.05-0.2 segundos (detección):
-- Selecciona token aleatorio (60% pump.fun, 40% raydium)
-- Prioriza los 50 tokens más recientes de pump.fun
-- Simula detección de compras
-- Evalúa si puede entrar
-- Muestra de qué plataforma proviene cada token
-```
-
-### 2. Entrada
-```
-Si hay capital disponible:
-- Calcula monto óptimo
-- Ejecuta snipe instantáneo
-- Registra la posición
-```
-
-### 3. Monitoreo
-```
-Cada segundo:
-- Verifica condiciones de salida
-- Evalúa take profit / stop loss
-- Cierra si es necesario
-- Fuerza cierre por tiempo
-```
-
-### 4. Salida
-```
-Cuando se cumple alguna condición:
-- Take Profit alcanzado
-- Stop Loss activado
-- Trailing Stop triggered
-- Tiempo máximo excedido
-- Ganancia después de X segundos
-```
-
-## 🔧 APIs Utilizadas
-
-### Pump.fun API
-El bot utiliza la API pública de pump.fun:
-
-```typescript
-// Obtener tokens recientes
-GET https://frontend-api-v2.pump.fun/coins/latest-metadatas
-
-// Calcular precio real
-precio = virtual_sol_reserves / virtual_token_reserves
-```
-
-### Raydium API v3
-El bot también se conecta a Raydium Launchpad:
-
-```typescript
-// Obtener pools nuevos
-GET https://api-v3.raydium.io/pools/info/list?poolType=all&poolSortField=default&sortType=desc
-
-// Calcular precio real
-precio = pool.price (directo de la API)
-```
-
-### ¿Por qué ambas plataformas?
-
-**Pump.fun:**
-- Tokens en bonding curve (pre-graduation)
-- Mayor volatilidad, mayor potencial de ganancias
-- Tokens muy nuevos, menos competencia
-
-**Raydium Launchpad:**
-- Tokens con liquidez real desde el inicio
-- Mayor estabilidad, menor riesgo de rugpulls
-- Competencia directa con pump.fun
-- Más oportunidades de detección
-
-**Combinar ambas = 2x más oportunidades de trading**
-
-## ⚠️ Advertencias
-
-### Riesgos
-- **Pérdida Total**: Puedes perder todo tu capital
-- **Volatilidad**: Los memecoins son extremadamente volátiles
-- **Rugpulls**: Muchos tokens son scams
-- **Slippage**: El precio puede moverse contra ti
-
-### Recomendaciones
-- ✅ Prueba primero en simulación
-- ✅ Usa fondos que puedas permitirte perder
-- ✅ Empieza con montos pequeños
-- ✅ Monitorea el bot regularmente
-- ✅ Ajusta los parámetros según tus resultados
-- ✅ No dejes el bot sin supervisión por largos períodos
-
-### No es Consejo Financiero
-Este software es solo para fines educativos y experimentales. No es consejo financiero. Úsalo bajo tu propio riesgo.
-
-## 📊 Estadísticas en Tiempo Real
-
-El bot muestra:
-- Total de operaciones
-- Tasa de éxito (win rate)
-- Ganancia total
-- Mejor/peor operación
-- Volumen total
-- Posiciones abiertas
-- Capital disponible
-
-## 🔐 Seguridad
-
-- ✅ Clave privada almacenada solo localmente
-- ✅ No se envía a ningún servidor
-- ✅ Solo se usa para firmar transacciones
-- ✅ Recomendado: billetera dedicada con fondos limitados
-
-## 🚀 Backend Local (Recomendado)
-
-Para mayor velocidad y confiabilidad, usa el backend local incluido:
-
-### Instalación Rápida:
+Editar `backend/.env`:
 
 ```bash
-# Ir a la carpeta del backend
+# OBLIGATORIO
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=TU_API_KEY_AQUI
+TRADING_MODE=paper
+ENABLE_LIVE_TRADING=false
+
+# OPCIONAL (recomendado)
+SOLANA_WS_URL=wss://mainnet.helius-rpc.com/?api-key=TU_API_KEY_AQUI
+```
+
+**Importante**: 
+- Reemplaza `TU_API_KEY_AQUI` con tu API key de Helius
+- Obtén una gratis en: https://helius.dev
+- **NUNCA commitees el archivo `.env`**
+
+### 3. Ejecutar Diagnóstico
+
+```bash
+cd backend
+node diagnose.js
+```
+
+Deberías ver:
+```
+✅ Configuración cargada correctamente
+✅ RPC HTTP conectado
+✅ RPC getVersion
+✅ RPC getSlot
+✅ RPC getLatestBlockhash
+✅ Modo de trading seguro
+```
+
+### 4. Iniciar Backend
+
+```bash
+cd backend
+npm start
+```
+
+Verás:
+```
+🚀 PUMPFUN SNIPER BOT - BACKEND
+============================================================
+
+📋 Configuración:
+   Modo: paper
+   Live trading: DESACTIVADO
+   RPC: https://mainnet.helius-rpc.com/?api-key=...
+   Puerto: 3001
+
+[Init] Conectando a Solana...
+[Init] ✅ Solana conectado
+
+[Init] Iniciando detector Pump.fun...
+[Init] ✅ Detector Pump.fun activo
+
+✅ Servidor corriendo en http://localhost:3001
+```
+
+### 5. Iniciar Frontend
+
+```bash
+# En otra terminal
+npm run dev
+```
+
+Abre: http://localhost:5173
+
+## 🏗️ Arquitectura
+
+```
+Frontend (React + TS)
+    ↓ HTTP/WebSocket
+Backend (Node.js + Express)
+    ├── Config Module (validación)
+    ├── Solana Connection Manager (HTTP + WebSocket)
+    ├── Pump.fun Detector (on-chain via WebSocket)
+    └── Execution Engine (paper/live)
+    ↓ WebSocket
+Solana Blockchain
+    └── Pump.fun Program (6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)
+```
+
+### Diferencias con v1.0
+
+| Característica | v1.0 (Antes) | v2.0 (Ahora) |
+|----------------|--------------|--------------|
+| Detección | Polling HTTP a API web | WebSocket on-chain |
+| Claves privadas | localStorage | Solo backend |
+| Health checks | Falsos | Reales |
+| Modo trading | Simulado | Paper/Live |
+| Seguridad | Baja | Alta |
+
+## 🔒 Seguridad
+
+### Modo de Trading
+
+**Paper Mode** (por defecto):
+```bash
+TRADING_MODE=paper
+ENABLE_LIVE_TRADING=false
+```
+- ✅ NO firma transacciones
+- ✅ NO envía transacciones
+- ✅ Solo simulación
+- ✅ Seguro para pruebas
+
+**Live Mode** (peligroso):
+```bash
+TRADING_MODE=live
+ENABLE_LIVE_TRADING=true
+```
+- ⚠️ FIRMA transacciones reales
+- ⚠️ ENVÍA transacciones a Solana
+- ⚠️ Usa dinero real
+- ⚠️ Requiere wallet dedicada
+
+### Claves Privadas
+
+- ❌ NUNCA en localStorage
+- ❌ NUNCA en código
+- ❌ NUNCA en logs
+- ✅ Solo en `.env` (backend)
+- ✅ Wallet dedicada con fondos limitados
+
+Ver [docs/SECURITY.md](docs/SECURITY.md) para guía completa.
+
+## 📡 APIs Utilizadas
+
+### Principal: On-Chain
+- **Pump.fun Program**: `6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P`
+  - Detección via WebSocket
+  - Tiempo real
+  - Sin polling
+
+### Auxiliares (Deprecated)
+- `https://frontend-api-v2.pump.fun` - API web no oficial (solo compatibilidad)
+- `https://api-v3.raydium.io` - API Raydium (pendiente implementación completa)
+
+### RPC
+- **Helius** (recomendado): `https://mainnet.helius-rpc.com`
+- **Fallback**: `https://api.mainnet-beta.solana.com`
+
+## 🔧 Comandos
+
+### Backend
+
+```bash
 cd backend
 
 # Instalar dependencias
 npm install
 
-# Iniciar el servidor
+# Iniciar servidor
+npm start
+
+# Modo desarrollo (hot reload)
+npm run dev
+
+# Ejecutar diagnóstico
+npm run diagnose
+# o
+node diagnose.js
+```
+
+### Frontend
+
+```bash
+# Instalar dependencias
+npm install
+
+# Modo desarrollo
+npm run dev
+
+# Build para producción
+npm run build
+```
+
+## 📊 Endpoints
+
+### Principales
+- `GET /api/health` - Health check básico
+- `GET /api/health/detailed` - Health check detallado
+- `GET /api/diagnose` - Diagnóstico completo
+- `GET /api/stats` - Estadísticas y métricas
+- `GET /api/config` - Configuración (safe)
+
+### Auxiliares (Deprecated)
+- `GET /api/pumpfun/tokens` - AUXILIAR (usa on-chain)
+- `GET /api/raydium/pools` - AUXILIAR
+
+## 🧪 Testing
+
+### Paper Trading (Recomendado)
+
+1. Configurar `.env`:
+```bash
+TRADING_MODE=paper
+ENABLE_LIVE_TRADING=false
+```
+
+2. Iniciar backend y frontend
+3. Monitorear detección de tokens en logs
+4. Verificar que NO se firman transacciones
+
+### Live Trading (Peligroso)
+
+**ANTES de activar**:
+- [ ] Probar exhaustivamente en paper mode
+- [ ] Crear wallet dedicada
+- [ ] Transferir solo fondos limitados
+- [ ] Configurar límites de riesgo
+- [ ] Revisar [docs/SECURITY.md](docs/SECURITY.md)
+
+**Activar**:
+```bash
+TRADING_MODE=live
+ENABLE_LIVE_TRADING=true
+WALLET_PRIVATE_KEY=tu_clave_aqui
+```
+
+**Kill Switch**:
+```bash
+# Detener inmediatamente
+Ctrl+C
+
+# O cambiar a paper mode
+TRADING_MODE=paper
 npm start
 ```
 
-El backend estará corriendo en `http://localhost:3001`
+## 📚 Documentación
 
-### Ventajas del Backend Local:
+- [ARQUITECTURA.md](docs/ARCHITECTURE.md) - Arquitectura completa
+- [SECURITY.md](docs/SECURITY.md) - Guía de seguridad
+- [INSPECCION_INICIAL.md](INSPECCION_INICIAL.md) - Informe de inspección
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) - Solución de problemas
 
-- ⚡ **Velocidad**: 100-300ms (vs 500-2000ms con proxy público)
-- 🎯 **Confiabilidad**: 95-99% (vs 70-80% con proxy público)
-- 💾 **Cache**: Sistema de cache integrado
-- 🔒 **Control**: Tú controlas toda la infraestructura
+## ⚙️ Configuración
 
-### Endpoints Disponibles:
+### Variables de Entorno Obligatorias
 
-- `GET /api/pumpfun/tokens` - Tokens de Pump.fun
-- `GET /api/raydium/pools` - Pools de Raydium
-- `GET /api/solana/version` - Información de Solana
-- `GET /api/health` - Health check
+```bash
+# RPC de Solana (Helius recomendado)
+SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=TU_API_KEY
 
-Ver `backend/README.md` para documentación completa.
+# Modo de trading
+TRADING_MODE=paper
+ENABLE_LIVE_TRADING=false
+```
 
-## 🎯 Próximos Pasos
+### Variables Opcionales
 
-1. **Probar en Simulación**: Familiarízate con el bot
-2. **Ajustar Parámetros**: Encuentra la configuración óptima
-3. **Analizar Resultados**: Revisa el historial
-4. **Decidir Estrategia**: Define tu enfoque
-5. **Operar con Cautela**: Si decides usar fondos reales
+```bash
+# WebSocket (recomendado para tiempo real)
+SOLANA_WS_URL=wss://mainnet.helius-rpc.com/?api-key=TU_API_KEY
 
-## 📝 Notas Técnicas
+# RPC de respaldo
+SOLANA_RPC_FALLBACK_URL=https://api.mainnet-beta.solana.com
 
-- **Framework**: React + TypeScript + Vite
-- **Estilos**: Tailwind CSS
-- **API**: pump.fun pública (sin autenticación)
-- **Red**: Solana Mainnet
-- **Almacenamiento**: localStorage para configuración
+# Wallet (solo para live trading)
+WALLET_PRIVATE_KEY=tu_clave_privada
 
-## 🤝 Contribuciones
+# Límites de riesgo
+DAILY_LOSS_LIMIT=1.0
+MAX_TRADE_AMOUNT=0.5
+MAX_SLIPPAGE_PERCENT=15
+MIN_WALLET_BALANCE=0.1
+```
 
-Este es un proyecto experimental. Siéntete libre de:
-- Reportar bugs
-- Sugerir mejoras
-- Probar diferentes estrategias
-- Compartir resultados
+Ver [backend/.env.example](backend/.env.example) para lista completa.
+
+## 🐛 Troubleshooting
+
+### Error: "SOLANA_RPC_URL es obligatorio"
+```bash
+# Solución: Configurar .env
+cd backend
+cp .env.example .env
+# Editar .env y agregar SOLANA_RPC_URL
+```
+
+### Error: "Debes reemplazar TU_API_KEY"
+```bash
+# Solución: Obtener API key de Helius
+# 1. Ir a https://helius.dev
+# 2. Registrarse
+# 3. Copiar API key
+# 4. Reemplazar en .env
+```
+
+### Error: "Conexión HTTP falló"
+```bash
+# Solución: Verificar RPC
+node diagnose.js
+# Revisar resultados y corregir SOLANA_RPC_URL
+```
+
+### Bot no detecta tokens
+```bash
+# Verificar que el detector está activo
+# Buscar en logs: "[PumpFun] ✅ Suscrito a logs del programa Pump.fun"
+# Si no aparece, revisar SOLANA_WS_URL
+```
+
+Ver [TROUBLESHOOTING.md](TROUBLESHOOTING.md) para más problemas.
+
+## 📈 Métricas
+
+El bot expone métricas en `/api/stats`:
+
+```json
+{
+  "pumpFunMetrics": {
+    "eventsReceived": 1234,
+    "eventsProcessed": 1200,
+    "eventsDuplicated": 34,
+    "eventsFailed": 0,
+    "lastEventAt": 1234567890,
+    "lastSlot": 123456789
+  }
+}
+```
+
+## 🔮 Roadmap
+
+### Corto Plazo
+- [ ] Implementar ejecución real de trades
+- [ ] Agregar adaptador PumpSwap
+- [ ] Agregar adaptador Raydium completo
+- [ ] Tests unitarios
+
+### Mediano Plazo
+- [ ] Sistema de backfill para slots perdidos
+- [ ] Yellowstone gRPC integration
+- [ ] Base de datos para persistencia
+- [ ] Sistema de notificaciones
+
+### Largo Plazo
+- [ ] Multi-usuario con autenticación
+- [ ] Dashboard analítico avanzado
+- [ ] Machine learning para predicción
+- [ ] Soporte para múltiples blockchains
+
+## 🤝 Contribuir
+
+1. Fork el repositorio
+2. Crear rama para feature (`git checkout -b feature/nueva-funcionalidad`)
+3. Commit cambios (`git commit -m 'Agregar nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
+5. Abrir Pull Request
 
 ## 📄 Licencia
 
-MIT License - Úsalo bajo tu propio riesgo.
+MIT
+
+## ⚠️ Disclaimer
+
+**ESTE SOFTWARE ES EXPERIMENTAL**
+
+- El trading de criptomonedas conlleva riesgos significativos
+- Puedes perder todo tu capital
+- Prueba exhaustivamente en paper mode antes de usar fondos reales
+- Usa solo fondos que puedas permitirte perder
+- No es consejo financiero
+- Úsalo bajo tu propio riesgo
+
+## 📞 Soporte
+
+- Issues: GitHub Issues
+- Documentación: Ver carpeta `docs/`
+- Seguridad: Ver [docs/SECURITY.md](docs/SECURITY.md)
 
 ---
 
-**⚠️ RECUERDA**: El trading de memecoins es extremadamente arriesgado. La mayoría de los tokens pierden valor. Nunca inviertas más de lo que puedas permitirte perder. Este bot es una herramienta experimental, no una garantía de ganancias.
+**Desarrollado con ❤️ para la comunidad de traders de Solana**
+
+**Versión**: 2.0.0  
+**Última actualización**: 2024  
+**Estado**: Funcional (paper trading) / En desarrollo (live trading)
