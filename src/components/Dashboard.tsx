@@ -76,12 +76,12 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Balance Total</p>
-              <p className="text-xl font-bold text-white">1.00 SOL</p>
+              <p className="text-xl font-bold text-white">0.50 SOL</p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Capital Disponible</p>
               <p className="text-xl font-bold text-green-400">
-                {(1.00 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)).toFixed(3)} SOL
+                {(0.50 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)).toFixed(3)} SOL
               </p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
@@ -93,7 +93,7 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Trades Posibles</p>
               <p className="text-xl font-bold text-blue-400">
-                {Math.floor((1.00 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)) / 0.1)}
+                {Math.floor((0.50 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)) / 0.1)}
               </p>
               <p className="text-xs text-gray-500">a 0.1 SOL c/u</p>
             </div>

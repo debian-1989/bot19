@@ -66,7 +66,7 @@ function App() {
     totalVolume: 0,
     activeSince: new Date(),
   });
-  const [solBalance, setSolBalance] = useState(1);
+  const [solBalance, setSolBalance] = useState(0.5);
   const [logs, setLogs] = useState<string[]>([]);
   const [realTokens, setRealTokens] = useState<PumpFunToken[]>([]);
   const [raydiumTokens, setRaydiumTokens] = useState<RaydiumToken[]>([]);
