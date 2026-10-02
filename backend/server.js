@@ -11,11 +11,22 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Conexión a Solana
-const solanaConnection = new Connection(
+// Conexión a Solana - Usar múltiples RPCs como fallback
+const RPC_ENDPOINTS = [
   process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
-  'confirmed'
-);
+  'https://solana-mainnet.g.alchemy.com/v2/demo',
+  'https://rpc.ankr.com/solana'
+];
+
+let currentRpcIndex = 0;
+let solanaConnection = new Connection(RPC_ENDPOINTS[0], 'confirmed');
+
+// Función para cambiar de RPC si uno falla
+function rotateRpc() {
+  currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
+  solanaConnection = new Connection(RPC_ENDPOINTS[currentRpcIndex], 'confirmed');
+  console.log(`[Solana] Rotated to RPC: ${RPC_ENDPOINTS[currentRpcIndex]}`);
+}
 
 // Cache simple para reducir llamadas a APIs
 const cache = new Map();
@@ -246,7 +257,7 @@ app.get('/api/raydium/pool/:id', async (req, res) => {
 // ENDPOINTS DE SOLANA RPC
 // ============================================
 
-// Obtener versión de Solana
+// Obtener versión de Solana con rotación de RPC
 app.get('/api/solana/version', async (req, res) => {
   try {
     const version = await solanaConnection.getVersion();
@@ -254,18 +265,43 @@ app.get('/api/solana/version', async (req, res) => {
     res.json({
       success: true,
       data: version,
+      rpc: RPC_ENDPOINTS[currentRpcIndex],
       timestamp: Date.now()
     });
   } catch (error) {
-    console.error('Error fetching Solana version:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error(`[Solana] Error with RPC ${currentRpcIndex}:`, error.message);
+    
+    // Si es error 403, rotar al siguiente RPC
+    if (error.message.includes('403') || error.message.includes('Forbidden')) {
+      console.log('[Solana] RPC blocked (403), rotating to next RPC...');
+      rotateRpc();
+      
+      // Reintentar con el nuevo RPC
+      try {
+        const version = await solanaConnection.getVersion();
+        res.json({
+          success: true,
+          data: version,
+          rpc: RPC_ENDPOINTS[currentRpcIndex],
+          timestamp: Date.now(),
+          rotated: true
+        });
+      } catch (retryError) {
+        res.status(500).json({
+          success: false,
+          error: `All RPCs failed. Last error: ${retryError.message}`
+        });
+      }
+    } else {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
   }
 });
 
-// Obtener balance de una cuenta
+// Obtener balance de una cuenta con rotación de RPC
 app.get('/api/solana/balance/:address', async (req, res) => {
   try {
     const { address } = req.params;
@@ -282,7 +318,8 @@ app.get('/api/solana/balance/:address', async (req, res) => {
     const balanceData = {
       address: address,
       lamports: balance,
-      sol: balance / 1e9
+      sol: balance / 1e9,
+      rpc: RPC_ENDPOINTS[currentRpcIndex]
     };
     
     setCacheData(cacheKey, balanceData);
@@ -292,11 +329,42 @@ app.get('/api/solana/balance/:address', async (req, res) => {
       data: balanceData
     });
   } catch (error) {
-    console.error('Error fetching Solana balance:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+    console.error(`[Solana] Error with RPC ${currentRpcIndex}:`, error.message);
+    
+    // Si es error 403, rotar al siguiente RPC
+    if (error.message.includes('403') || error.message.includes('Forbidden')) {
+      console.log('[Solana] RPC blocked (403), rotating to next RPC...');
+      rotateRpc();
+      
+      // Reintentar con el nuevo RPC
+      try {
+        const pubkey = new PublicKey(req.params.address);
+        const balance = await solanaConnection.getBalance(pubkey);
+        
+        const balanceData = {
+          address: req.params.address,
+          lamports: balance,
+          sol: balance / 1e9,
+          rpc: RPC_ENDPOINTS[currentRpcIndex]
+        };
+        
+        res.json({
+          success: true,
+          data: balanceData,
+          rotated: true
+        });
+      } catch (retryError) {
+        res.status(500).json({
+          success: false,
+          error: `All RPCs failed. Last error: ${retryError.message}`
+        });
+      }
+    } else {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
   }
 });
 
