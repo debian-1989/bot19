@@ -27,18 +27,16 @@ export interface PumpFunTrade {
 }
 
 class PumpFunService {
-  private baseUrl = 'https://frontend-api-v2.pump.fun';
-  private corsProxy = 'https://api.allorigins.win/raw?url=';
+  private baseUrl = 'http://localhost:3001/api/pumpfun';
   private tokens: PumpFunToken[] = [];
   private lastFetch = 0;
-  private fetchInterval = 1000; // 1 segundo (antes 5 segundos)
+  private fetchInterval = 1000; // 1 segundo
   private isPolling = false;
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private listeners: ((tokens: PumpFunToken[]) => void)[] = [];
   private newTokenListeners: ((newTokens: PumpFunToken[]) => void)[] = [];
   private lastTokenIds: Set<string> = new Set();
   private useFallback = false;
-  private useCorsProxy = true; // Usar proxy CORS por defecto
 
   constructor() {}
 
@@ -75,14 +73,11 @@ class PumpFunService {
   // Obtener tokens recientes de pump.fun
   async fetchLatestTokens(limit: number = 200): Promise<PumpFunToken[]> {
     try {
-      const targetUrl = `${this.baseUrl}/coins/latest-metadatas?limit=${limit}&offset=0&includeNsfw=false`;
-      const fetchUrl = this.useCorsProxy ? `${this.corsProxy}${encodeURIComponent(targetUrl)}` : targetUrl;
+      const fetchUrl = `${this.baseUrl}/tokens?limit=${limit}&offset=0`;
       
-      console.log('[PumpFun] Fetching tokens...', { 
+      console.log('[PumpFun] Fetching tokens from backend...', { 
         limit, 
-        originalUrl: targetUrl,
-        fetchUrl: fetchUrl,
-        usingProxy: this.useCorsProxy
+        fetchUrl: fetchUrl
       });
       
       const response = await fetch(fetchUrl, {
@@ -98,7 +93,13 @@ class PumpFunService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.json();
+      const responseData = await response.json();
+      
+      if (!responseData.success) {
+        throw new Error(`Backend error: ${responseData.error}`);
+      }
+      
+      const data = responseData.data;
       console.log('[PumpFun] Tokens received:', data.length);
       
       // Detectar tokens NUEVOS

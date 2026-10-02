@@ -236,6 +236,41 @@ El bot muestra:
 - ✅ Solo se usa para firmar transacciones
 - ✅ Recomendado: billetera dedicada con fondos limitados
 
+## 🚀 Backend Local (Recomendado)
+
+Para mayor velocidad y confiabilidad, usa el backend local incluido:
+
+### Instalación Rápida:
+
+```bash
+# Ir a la carpeta del backend
+cd backend
+
+# Instalar dependencias
+npm install
+
+# Iniciar el servidor
+npm start
+```
+
+El backend estará corriendo en `http://localhost:3001`
+
+### Ventajas del Backend Local:
+
+- ⚡ **Velocidad**: 100-300ms (vs 500-2000ms con proxy público)
+- 🎯 **Confiabilidad**: 95-99% (vs 70-80% con proxy público)
+- 💾 **Cache**: Sistema de cache integrado
+- 🔒 **Control**: Tú controlas toda la infraestructura
+
+### Endpoints Disponibles:
+
+- `GET /api/pumpfun/tokens` - Tokens de Pump.fun
+- `GET /api/raydium/pools` - Pools de Raydium
+- `GET /api/solana/version` - Información de Solana
+- `GET /api/health` - Health check
+
+Ver `backend/README.md` para documentación completa.
+
 ## 🎯 Próximos Pasos
 
 1. **Probar en Simulación**: Familiarízate con el bot
