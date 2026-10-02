@@ -20,12 +20,31 @@ const RPC_ENDPOINTS = [
 
 let currentRpcIndex = 0;
 let solanaConnection = new Connection(RPC_ENDPOINTS[0], 'confirmed');
+let solanaUseDemo = false; // Modo demo si todos los RPCs fallan
 
 // Función para cambiar de RPC si uno falla
 function rotateRpc() {
   currentRpcIndex = (currentRpcIndex + 1) % RPC_ENDPOINTS.length;
   solanaConnection = new Connection(RPC_ENDPOINTS[currentRpcIndex], 'confirmed');
   console.log(`[Solana] Rotated to RPC: ${RPC_ENDPOINTS[currentRpcIndex]}`);
+}
+
+// Datos demo para Solana
+function getSolanaDemoVersion() {
+  return {
+    'solana-core': '1.18.26',
+    'feature-set': 4215500110,
+    _demo: true
+  };
+}
+
+function getSolanaDemoBalance(address) {
+  return {
+    address: address,
+    lamports: Math.floor(Math.random() * 10000000000), // 0-10 SOL aleatorio
+    sol: Math.random() * 10,
+    _demo: true
+  };
 }
 
 // Cache simple para reducir llamadas a APIs
@@ -63,6 +82,7 @@ const PUMPFUN_ENDPOINTS = [
 
 let currentPumpFunIndex = 0;
 let pumpFunLastSuccess = 0;
+let pumpFunUseDemo = false; // Modo demo si todas las APIs fallan
 
 // Función para rotar entre endpoints de Pump.fun
 function rotatePumpFunEndpoint() {
@@ -70,9 +90,46 @@ function rotatePumpFunEndpoint() {
   console.log(`[Pump.fun] Rotated to endpoint: ${PUMPFUN_ENDPOINTS[currentPumpFunIndex]}`);
 }
 
+// Generar tokens demo realistas
+function generateDemoTokens(count = 200) {
+  const symbols = ['BONK', 'WIF', 'POPCAT', 'MYRO', 'WEN', 'BOME', 'SLERF', 'MEW', 'PNUT', 'ACT', 'MOODENG', 'GOAT', 'HIPPO', 'TOSHI', 'COQ'];
+  const tokens = [];
+  
+  for (let i = 0; i < count; i++) {
+    const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+    const mint = Array.from({length: 44}, () => '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[Math.floor(Math.random() * 58)]).join('');
+    
+    tokens.push({
+      mint: mint,
+      name: `${symbol} Token`,
+      symbol: symbol,
+      description: `Demo ${symbol} token for testing`,
+      image_uri: '',
+      created_timestamp: Date.now() - Math.floor(Math.random() * 86400000),
+      raydium_pool: null,
+      complete: Math.random() > 0.7,
+      virtual_sol_reserves: Math.random() * 100 + 10,
+      virtual_token_reserves: Math.random() * 1000000000 + 100000000,
+      total_supply: 1000000000,
+      market_cap: Math.random() * 1000000,
+      king_of_the_hill_timestamp: 0,
+      usd_market_cap: Math.random() * 100000000,
+      _demo: true
+    });
+  }
+  
+  return tokens;
+}
+
 // Función auxiliar para hacer fetch con fallback
 async function fetchWithFallback(url, options = {}) {
   const errors = [];
+  
+  // Si ya estamos en modo demo, retornar datos demo inmediatamente
+  if (pumpFunUseDemo) {
+    console.log('[Pump.fun] Using demo mode');
+    return { data: generateDemoTokens(), endpoint: 'demo' };
+  }
   
   for (let i = 0; i < PUMPFUN_ENDPOINTS.length; i++) {
     const endpointIndex = (currentPumpFunIndex + i) % PUMPFUN_ENDPOINTS.length;
@@ -109,6 +166,7 @@ async function fetchWithFallback(url, options = {}) {
       // Éxito - actualizar índice
       currentPumpFunIndex = endpointIndex;
       pumpFunLastSuccess = Date.now();
+      pumpFunUseDemo = false; // Desactivar modo demo si funciona
       
       return { data, endpoint: PUMPFUN_ENDPOINTS[endpointIndex] };
     } catch (error) {
@@ -117,7 +175,11 @@ async function fetchWithFallback(url, options = {}) {
     }
   }
   
-  throw new Error(`All Pump.fun endpoints failed. Errors: ${errors.join(', ')}`);
+  // Si todos los endpoints fallan, activar modo demo
+  console.warn('[Pump.fun] All endpoints failed, activating demo mode');
+  pumpFunUseDemo = true;
+  
+  return { data: generateDemoTokens(), endpoint: 'demo' };
 }
 
 // Obtener tokens recientes de Pump.fun
@@ -234,6 +296,7 @@ const RAYDIUM_ENDPOINTS = [
 
 let currentRaydiumIndex = 0;
 let raydiumLastSuccess = 0;
+let raydiumUseDemo = false; // Modo demo si todas las APIs fallan
 
 // Función para rotar entre endpoints de Raydium
 function rotateRaydiumEndpoint() {
@@ -241,9 +304,57 @@ function rotateRaydiumEndpoint() {
   console.log(`[Raydium] Rotated to endpoint: ${RAYDIUM_ENDPOINTS[currentRaydiumIndex]}`);
 }
 
+// Generar pools demo realistas
+function generateDemoPools(count = 50) {
+  const symbols = ['RAY', 'ORCA', 'MNGO', 'STEP', 'SRM', 'COPE', 'OXY', 'MAPS', 'MER', 'FRKT', 'PORT', 'SLIM', 'ATLAS', 'POLIS'];
+  const pools = [];
+  
+  for (let i = 0; i < count; i++) {
+    const symbolA = symbols[Math.floor(Math.random() * symbols.length)];
+    const mintA = Array.from({length: 44}, () => '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'[Math.floor(Math.random() * 58)]).join('');
+    
+    pools.push({
+      id: `pool_${mintA}`,
+      mintA: {
+        symbol: symbolA,
+        mint: mintA,
+        decimals: 9
+      },
+      mintB: {
+        symbol: 'SOL',
+        mint: 'So11111111111111111111111111111111111111112',
+        decimals: 9
+      },
+      price: Math.random() * 10,
+      liquidity: Math.random() * 100000,
+      volume24h: Math.random() * 1000000,
+      fee24h: Math.random() * 10000,
+      apr24h: Math.random() * 100,
+      type: 'CLMM',
+      status: 'Initialized',
+      _demo: true
+    });
+  }
+  
+  return pools;
+}
+
 // Función auxiliar para hacer fetch con fallback para Raydium
 async function fetchRaydiumWithFallback(url, options = {}) {
   const errors = [];
+  
+  // Si ya estamos en modo demo, retornar datos demo inmediatamente
+  if (raydiumUseDemo) {
+    console.log('[Raydium] Using demo mode');
+    const demoPools = generateDemoPools();
+    return { 
+      data: { 
+        success: true, 
+        data: { data: demoPools } 
+      }, 
+      endpoint: 'demo' 
+    };
+  }
   
   for (let i = 0; i < RAYDIUM_ENDPOINTS.length; i++) {
     const endpointIndex = (currentRaydiumIndex + i) % RAYDIUM_ENDPOINTS.length;
@@ -280,6 +391,7 @@ async function fetchRaydiumWithFallback(url, options = {}) {
       // Éxito - actualizar índice
       currentRaydiumIndex = endpointIndex;
       raydiumLastSuccess = Date.now();
+      raydiumUseDemo = false; // Desactivar modo demo si funciona
       
       return { data, endpoint: RAYDIUM_ENDPOINTS[endpointIndex] };
     } catch (error) {
@@ -288,7 +400,18 @@ async function fetchRaydiumWithFallback(url, options = {}) {
     }
   }
   
-  throw new Error(`All Raydium endpoints failed. Errors: ${errors.join(', ')}`);
+  // Si todos los endpoints fallan, activar modo demo
+  console.warn('[Raydium] All endpoints failed, activating demo mode');
+  raydiumUseDemo = true;
+  
+  const demoPools = generateDemoPools();
+  return { 
+    data: { 
+      success: true, 
+      data: { data: demoPools } 
+    }, 
+    endpoint: 'demo' 
+  };
 }
 
 // Obtener pools de Raydium
@@ -369,10 +492,24 @@ app.get('/api/raydium/pool/:id', async (req, res) => {
 // ENDPOINTS DE SOLANA RPC
 // ============================================
 
-// Obtener versión de Solana con rotación de RPC
+// Obtener versión de Solana con rotación de RPC y modo demo
 app.get('/api/solana/version', async (req, res) => {
+  // Si ya estamos en modo demo, retornar datos demo inmediatamente
+  if (solanaUseDemo) {
+    console.log('[Solana] Using demo mode');
+    return res.json({
+      success: true,
+      data: getSolanaDemoVersion(),
+      rpc: 'demo',
+      timestamp: Date.now(),
+      demo: true
+    });
+  }
+
   try {
     const version = await solanaConnection.getVersion();
+    
+    solanaUseDemo = false; // Desactivar modo demo si funciona
     
     res.json({
       success: true,
@@ -383,27 +520,44 @@ app.get('/api/solana/version', async (req, res) => {
   } catch (error) {
     console.error(`[Solana] Error with RPC ${currentRpcIndex}:`, error.message);
     
-    // Si es error 403, rotar al siguiente RPC
-    if (error.message.includes('403') || error.message.includes('Forbidden')) {
-      console.log('[Solana] RPC blocked (403), rotating to next RPC...');
-      rotateRpc();
+    // Si es error 403 o fetch, rotar al siguiente RPC
+    if (error.message.includes('403') || error.message.includes('Forbidden') || error.message.includes('fetch')) {
+      console.log('[Solana] RPC failed, rotating to next RPC...');
       
-      // Reintentar con el nuevo RPC
-      try {
-        const version = await solanaConnection.getVersion();
-        res.json({
-          success: true,
-          data: version,
-          rpc: RPC_ENDPOINTS[currentRpcIndex],
-          timestamp: Date.now(),
-          rotated: true
-        });
-      } catch (retryError) {
-        res.status(500).json({
-          success: false,
-          error: `All RPCs failed. Last error: ${retryError.message}`
-        });
+      // Intentar con todos los RPCs
+      for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+        rotateRpc();
+        
+        try {
+          const testConnection = new Connection(RPC_ENDPOINTS[currentRpcIndex], 'confirmed');
+          const version = await testConnection.getVersion();
+          
+          solanaUseDemo = false;
+          
+          return res.json({
+            success: true,
+            data: version,
+            rpc: RPC_ENDPOINTS[currentRpcIndex],
+            timestamp: Date.now(),
+            rotated: true
+          });
+        } catch (retryError) {
+          console.error(`[Solana] RPC ${currentRpcIndex} failed:`, retryError.message);
+        }
       }
+      
+      // Si todos los RPCs fallan, activar modo demo
+      console.warn('[Solana] All RPCs failed, activating demo mode');
+      solanaUseDemo = true;
+      
+      return res.json({
+        success: true,
+        data: getSolanaDemoVersion(),
+        rpc: 'demo',
+        timestamp: Date.now(),
+        demo: true,
+        warning: 'All RPCs failed, using demo data'
+      });
     } else {
       res.status(500).json({
         success: false,
@@ -413,12 +567,23 @@ app.get('/api/solana/version', async (req, res) => {
   }
 });
 
-// Obtener balance de una cuenta con rotación de RPC
+// Obtener balance de una cuenta con rotación de RPC y modo demo
 app.get('/api/solana/balance/:address', async (req, res) => {
+  const { address } = req.params;
+  const cacheKey = `solana_balance_${address}`;
+  
+  // Si ya estamos en modo demo, retornar datos demo inmediatamente
+  if (solanaUseDemo) {
+    console.log('[Solana] Using demo mode for balance');
+    const demoBalance = getSolanaDemoBalance(address);
+    return res.json({
+      success: true,
+      data: demoBalance,
+      demo: true
+    });
+  }
+  
   try {
-    const { address } = req.params;
-    const cacheKey = `solana_balance_${address}`;
-    
     const cached = getCachedData(cacheKey);
     if (cached) {
       return res.json({ success: true, data: cached, cached: true });
@@ -435,6 +600,7 @@ app.get('/api/solana/balance/:address', async (req, res) => {
     };
     
     setCacheData(cacheKey, balanceData);
+    solanaUseDemo = false;
     
     res.json({
       success: true,
@@ -443,34 +609,49 @@ app.get('/api/solana/balance/:address', async (req, res) => {
   } catch (error) {
     console.error(`[Solana] Error with RPC ${currentRpcIndex}:`, error.message);
     
-    // Si es error 403, rotar al siguiente RPC
-    if (error.message.includes('403') || error.message.includes('Forbidden')) {
-      console.log('[Solana] RPC blocked (403), rotating to next RPC...');
-      rotateRpc();
+    // Si es error 403 o fetch, intentar con otros RPCs
+    if (error.message.includes('403') || error.message.includes('Forbidden') || error.message.includes('fetch')) {
+      console.log('[Solana] RPC failed, trying other RPCs...');
       
-      // Reintentar con el nuevo RPC
-      try {
-        const pubkey = new PublicKey(req.params.address);
-        const balance = await solanaConnection.getBalance(pubkey);
+      // Intentar con todos los RPCs
+      for (let i = 0; i < RPC_ENDPOINTS.length; i++) {
+        rotateRpc();
         
-        const balanceData = {
-          address: req.params.address,
-          lamports: balance,
-          sol: balance / 1e9,
-          rpc: RPC_ENDPOINTS[currentRpcIndex]
-        };
-        
-        res.json({
-          success: true,
-          data: balanceData,
-          rotated: true
-        });
-      } catch (retryError) {
-        res.status(500).json({
-          success: false,
-          error: `All RPCs failed. Last error: ${retryError.message}`
-        });
+        try {
+          const testConnection = new Connection(RPC_ENDPOINTS[currentRpcIndex], 'confirmed');
+          const pubkey = new PublicKey(address);
+          const balance = await testConnection.getBalance(pubkey);
+          
+          const balanceData = {
+            address: address,
+            lamports: balance,
+            sol: balance / 1e9,
+            rpc: RPC_ENDPOINTS[currentRpcIndex]
+          };
+          
+          solanaUseDemo = false;
+          
+          return res.json({
+            success: true,
+            data: balanceData,
+            rotated: true
+          });
+        } catch (retryError) {
+          console.error(`[Solana] RPC ${currentRpcIndex} failed:`, retryError.message);
+        }
       }
+      
+      // Si todos los RPCs fallan, activar modo demo
+      console.warn('[Solana] All RPCs failed for balance, activating demo mode');
+      solanaUseDemo = true;
+      
+      const demoBalance = getSolanaDemoBalance(address);
+      return res.json({
+        success: true,
+        data: demoBalance,
+        demo: true,
+        warning: 'All RPCs failed, using demo data'
+      });
     } else {
       res.status(500).json({
         success: false,
@@ -525,18 +706,24 @@ app.get('/api/health', (req, res) => {
       pumpfun: {
         current_endpoint: PUMPFUN_ENDPOINTS[currentPumpFunIndex],
         last_success: pumpFunLastSuccess,
-        available_endpoints: PUMPFUN_ENDPOINTS.length
+        available_endpoints: PUMPFUN_ENDPOINTS.length,
+        demo_mode: pumpFunUseDemo
       },
       raydium: {
         current_endpoint: RAYDIUM_ENDPOINTS[currentRaydiumIndex],
         last_success: raydiumLastSuccess,
-        available_endpoints: RAYDIUM_ENDPOINTS.length
+        available_endpoints: RAYDIUM_ENDPOINTS.length,
+        demo_mode: raydiumUseDemo
       },
       solana: {
         current_rpc: RPC_ENDPOINTS[currentRpcIndex],
-        available_rpcs: RPC_ENDPOINTS.length
+        available_rpcs: RPC_ENDPOINTS.length,
+        demo_mode: solanaUseDemo
       }
-    }
+    },
+    message: solanaUseDemo || pumpFunUseDemo || raydiumUseDemo 
+      ? 'Some services are in demo mode' 
+      : 'All services operational'
   });
 });
 
@@ -544,40 +731,61 @@ app.get('/api/health', (req, res) => {
 app.get('/api/diagnose', async (req, res) => {
   const results = {
     timestamp: Date.now(),
-    pumpfun: { status: 'unknown', error: null, endpoint: null },
-    raydium: { status: 'unknown', error: null, endpoint: null },
-    solana: { status: 'unknown', error: null, rpc: null }
+    pumpfun: { status: 'unknown', error: null, endpoint: null, demo: pumpFunUseDemo },
+    raydium: { status: 'unknown', error: null, endpoint: null, demo: raydiumUseDemo },
+    solana: { status: 'unknown', error: null, rpc: null, demo: solanaUseDemo }
   };
 
   // Probar Pump.fun
   try {
     const testUrl = 'https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=1&offset=0';
     const { endpoint } = await fetchWithFallback(testUrl);
-    results.pumpfun = { status: 'ok', endpoint: endpoint };
+    results.pumpfun = { 
+      status: 'ok', 
+      endpoint: endpoint,
+      demo: endpoint === 'demo'
+    };
   } catch (error) {
-    results.pumpfun = { status: 'error', error: error.message };
+    results.pumpfun = { status: 'error', error: error.message, demo: false };
   }
 
   // Probar Raydium
   try {
     const testUrl = 'https://api-v3.raydium.io/pools/info/list?poolType=all&poolSortField=default&sortType=desc&pageSize=1&page=1';
     const { endpoint } = await fetchRaydiumWithFallback(testUrl);
-    results.raydium = { status: 'ok', endpoint: endpoint };
+    results.raydium = { 
+      status: 'ok', 
+      endpoint: endpoint,
+      demo: endpoint === 'demo'
+    };
   } catch (error) {
-    results.raydium = { status: 'error', error: error.message };
+    results.raydium = { status: 'error', error: error.message, demo: false };
   }
 
   // Probar Solana
   try {
     await solanaConnection.getVersion();
-    results.solana = { status: 'ok', rpc: RPC_ENDPOINTS[currentRpcIndex] };
+    results.solana = { 
+      status: 'ok', 
+      rpc: RPC_ENDPOINTS[currentRpcIndex],
+      demo: false
+    };
   } catch (error) {
-    results.solana = { status: 'error', error: error.message };
+    results.solana = { 
+      status: 'error', 
+      error: error.message,
+      demo: solanaUseDemo
+    };
   }
 
   res.json({
     success: true,
-    results: results
+    results: results,
+    summary: {
+      total_ok: Object.values(results).filter(r => r.status === 'ok').length,
+      total_error: Object.values(results).filter(r => r.status === 'error').length,
+      total_demo: Object.values(results).filter(r => r.demo).length
+    }
   });
 });
 
