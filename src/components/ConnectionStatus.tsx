@@ -10,6 +10,9 @@ interface ConnectionStatus {
     lastUpdate: number;
     error?: string;
     polling: boolean;
+    isConnected: boolean;
+    consecutiveErrors: number;
+    lastError: string | null;
   };
   raydium: {
     connected: boolean;
@@ -18,6 +21,9 @@ interface ConnectionStatus {
     lastUpdate: number;
     error?: string;
     polling: boolean;
+    isConnected: boolean;
+    consecutiveErrors: number;
+    lastError: string | null;
   };
   solana: {
     connected: boolean;
@@ -35,6 +41,9 @@ export default function ConnectionStatus() {
       tokenCount: 0,
       lastUpdate: 0,
       polling: false,
+      isConnected: false,
+      consecutiveErrors: 0,
+      lastError: null,
     },
     raydium: {
       connected: false,
@@ -42,6 +51,9 @@ export default function ConnectionStatus() {
       tokenCount: 0,
       lastUpdate: 0,
       polling: false,
+      isConnected: false,
+      consecutiveErrors: 0,
+      lastError: null,
     },
     solana: {
       connected: false,
@@ -65,6 +77,9 @@ export default function ConnectionStatus() {
           tokenCount: pumpStatus.tokenCount,
           lastUpdate: pumpStatus.lastUpdate,
           polling: pumpStatus.connected,
+          isConnected: pumpStatus.isConnected,
+          consecutiveErrors: pumpStatus.consecutiveErrors,
+          lastError: pumpStatus.lastError,
           mode: pumpStatus.tokenCount > 0 ? (pumpStatus.isFallback ? 'fallback' : 'real') : 'disconnected',
         },
         raydium: {
@@ -73,6 +88,9 @@ export default function ConnectionStatus() {
           tokenCount: rayStatus.tokenCount,
           lastUpdate: rayStatus.lastUpdate,
           polling: rayStatus.connected,
+          isConnected: rayStatus.isConnected,
+          consecutiveErrors: rayStatus.consecutiveErrors,
+          lastError: rayStatus.lastError,
           mode: rayStatus.tokenCount > 0 ? (rayStatus.isFallback ? 'fallback' : 'real') : 'disconnected',
         },
       }));
@@ -288,12 +306,29 @@ export default function ConnectionStatus() {
             )}
           </div>
 
-          <button
-            onClick={testPumpFunConnection}
-            className="w-full mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            Probar Conexión
-          </button>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={testPumpFunConnection}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              Probar
+            </button>
+            <button
+              onClick={async () => {
+                console.log('[UI] Forcing Pump.fun reconnection...');
+                await pumpFunRealService.forceReconnect();
+              }}
+              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+            >
+              Reconectar
+            </button>
+          </div>
+          
+          {status.pumpfun.consecutiveErrors > 0 && (
+            <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400">
+              ⚠️ Errores consecutivos: {status.pumpfun.consecutiveErrors}
+            </div>
+          )}
         </div>
 
         {/* Raydium */}
@@ -343,12 +378,29 @@ export default function ConnectionStatus() {
             )}
           </div>
 
-          <button
-            onClick={testRaydiumConnection}
-            className="w-full mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-          >
-            Probar Conexión
-          </button>
+          <div className="flex gap-2 mt-4">
+            <button
+              onClick={testRaydiumConnection}
+              className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
+            >
+              Probar
+            </button>
+            <button
+              onClick={async () => {
+                console.log('[UI] Forcing Raydium reconnection...');
+                await raydiumService.forceReconnect();
+              }}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+            >
+              Reconectar
+            </button>
+          </div>
+          
+          {status.raydium.consecutiveErrors > 0 && (
+            <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-xs text-yellow-400">
+              ⚠️ Errores consecutivos: {status.raydium.consecutiveErrors}
+            </div>
+          )}
         </div>
 
         {/* Solana RPC */}

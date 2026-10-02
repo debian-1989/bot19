@@ -48,6 +48,15 @@ class RaydiumService {
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private listeners: ((tokens: RaydiumToken[]) => void)[] = [];
   private useFallback = false;
+  
+  // Sistema de reconexión
+  private retryCount = 0;
+  private maxRetries = 5;
+  private retryDelay = 1000; // 1 segundo inicial
+  private maxRetryDelay = 30000; // 30 segundos máximo
+  private consecutiveErrors = 0;
+  private lastError: string | null = null;
+  private isConnected = false;
 
   constructor() {}
 
@@ -82,17 +91,27 @@ class RaydiumService {
     return tokens;
   }
 
-  // Obtener pools nuevos de Raydium (incluye Launchpad)
+  // Obtener pools nuevos de Raydium (incluye Launchpad) con reconexión automática
   async fetchNewPools(limit: number = 50): Promise<RaydiumPool[]> {
     try {
       const fetchUrl = `${this.baseUrl}/pools?pageSize=${limit}&page=1`;
       
       console.log('[Raydium] Fetching pools from backend...', { 
         limit,
-        fetchUrl: fetchUrl
+        fetchUrl: fetchUrl,
+        retryCount: this.retryCount,
+        isConnected: this.isConnected
       });
       
-      const response = await fetch(fetchUrl);
+      // Crear un AbortController para timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos timeout
+      
+      const response = await fetch(fetchUrl, {
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
       
       console.log('[Raydium] Response status:', response.status);
       
@@ -107,6 +126,13 @@ class RaydiumService {
       }
       
       const data = responseData.data;
+      
+      // Resetear contadores de error si fue exitoso
+      this.consecutiveErrors = 0;
+      this.retryCount = 0;
+      this.retryDelay = 1000;
+      this.isConnected = true;
+      this.lastError = null;
       
       if (data.success && data.data) {
         console.log('[Raydium] Pools received:', data.data.data?.length || 0);
@@ -127,7 +153,30 @@ class RaydiumService {
       
       return [];
     } catch (error) {
-      console.error('[Raydium] Error fetching pools, using fallback:', error);
+      this.consecutiveErrors++;
+      this.isConnected = false;
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.lastError = errorMessage;
+      
+      console.error(`[Raydium] Error fetching pools (attempt ${this.consecutiveErrors}):`, errorMessage);
+      
+      // Implementar retry con backoff exponencial
+      if (this.consecutiveErrors <= this.maxRetries) {
+        console.log(`[Raydium] Retrying in ${this.retryDelay}ms... (attempt ${this.consecutiveErrors}/${this.maxRetries})`);
+        
+        // Esperar antes de reintentar
+        await new Promise(resolve => setTimeout(resolve, this.retryDelay));
+        
+        // Aumentar delay para el próximo retry (backoff exponencial)
+        this.retryDelay = Math.min(this.retryDelay * 2, this.maxRetryDelay);
+        
+        // Reintentar
+        return this.fetchNewPools(limit);
+      }
+      
+      // Si después de todos los retries sigue fallando, usar fallback
+      console.error('[Raydium] Max retries reached, using fallback');
       
       // Si falla la API real, usar tokens simulados
       if (!this.useFallback || this.tokens.length === 0) {
@@ -261,13 +310,33 @@ class RaydiumService {
   }
 
   // Obtener estado de conexión
-  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number; isFallback: boolean } {
+  getStatus(): { connected: boolean; lastUpdate: number; tokenCount: number; isFallback: boolean; isConnected: boolean; consecutiveErrors: number; lastError: string | null } {
     return {
       connected: this.isPolling,
       lastUpdate: this.lastFetch,
       tokenCount: this.tokens.length,
-      isFallback: this.useFallback
+      isFallback: this.useFallback,
+      isConnected: this.isConnected,
+      consecutiveErrors: this.consecutiveErrors,
+      lastError: this.lastError
     };
+  }
+
+  // Resetear estado de conexión
+  resetConnection() {
+    console.log('[Raydium] Resetting connection state');
+    this.consecutiveErrors = 0;
+    this.retryCount = 0;
+    this.retryDelay = 1000;
+    this.isConnected = false;
+    this.lastError = null;
+  }
+
+  // Forzar reconexión
+  async forceReconnect() {
+    console.log('[Raydium] Forcing reconnection...');
+    this.resetConnection();
+    return this.fetchNewPools();
   }
 }
 
