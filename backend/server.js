@@ -51,6 +51,75 @@ function setCacheData(key, data) {
 // ENDPOINTS DE PUMP.FUN
 // ============================================
 
+// Configuración de endpoints para Pump.fun con múltiples opciones
+const PUMPFUN_ENDPOINTS = [
+  // Directo (puede tener CORS issues)
+  'https://frontend-api-v2.pump.fun',
+  // Proxies CORS públicos como fallback
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.io/?',
+  'https://api.codetabs.com/v1/proxy?quest='
+];
+
+let currentPumpFunIndex = 0;
+let pumpFunLastSuccess = 0;
+
+// Función para rotar entre endpoints de Pump.fun
+function rotatePumpFunEndpoint() {
+  currentPumpFunIndex = (currentPumpFunIndex + 1) % PUMPFUN_ENDPOINTS.length;
+  console.log(`[Pump.fun] Rotated to endpoint: ${PUMPFUN_ENDPOINTS[currentPumpFunIndex]}`);
+}
+
+// Función auxiliar para hacer fetch con fallback
+async function fetchWithFallback(url, options = {}) {
+  const errors = [];
+  
+  for (let i = 0; i < PUMPFUN_ENDPOINTS.length; i++) {
+    const endpointIndex = (currentPumpFunIndex + i) % PUMPFUN_ENDPOINTS.length;
+    const endpoint = PUMPFUN_ENDPOINTS[endpointIndex];
+    
+    try {
+      let fetchUrl;
+      
+      // Si es un proxy CORS, necesitamos codificar la URL
+      if (endpoint.includes('allorigins') || endpoint.includes('corsproxy') || endpoint.includes('codetabs')) {
+        fetchUrl = `${endpoint}${encodeURIComponent(url)}`;
+      } else {
+        fetchUrl = url;
+      }
+      
+      console.log(`[Pump.fun] Attempt ${i + 1}/${PUMPFUN_ENDPOINTS.length} with: ${endpoint}`);
+      
+      const response = await fetch(fetchUrl, {
+        ...options,
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          ...options.headers
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Éxito - actualizar índice
+      currentPumpFunIndex = endpointIndex;
+      pumpFunLastSuccess = Date.now();
+      
+      return { data, endpoint: PUMPFUN_ENDPOINTS[endpointIndex] };
+    } catch (error) {
+      errors.push(`${endpoint}: ${error.message}`);
+      console.error(`[Pump.fun] Failed with ${endpoint}:`, error.message);
+    }
+  }
+  
+  throw new Error(`All Pump.fun endpoints failed. Errors: ${errors.join(', ')}`);
+}
+
 // Obtener tokens recientes de Pump.fun
 app.get('/api/pumpfun/tokens', async (req, res) => {
   try {
@@ -64,15 +133,9 @@ app.get('/api/pumpfun/tokens', async (req, res) => {
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=${limit}&offset=${offset}&includeNsfw=false`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const targetUrl = `https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=${limit}&offset=${offset}&includeNsfw=false`;
+    
+    const { data, endpoint } = await fetchWithFallback(targetUrl);
     
     // Guardar en cache
     setCacheData(cacheKey, data);
@@ -81,10 +144,11 @@ app.get('/api/pumpfun/tokens', async (req, res) => {
       success: true,
       data: data,
       count: data.length,
+      endpoint: endpoint,
       timestamp: Date.now()
     });
   } catch (error) {
-    console.error('Error fetching Pump.fun tokens:', error.message);
+    console.error('[Pump.fun] Error fetching tokens:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -103,23 +167,18 @@ app.get('/api/pumpfun/token/:mint', async (req, res) => {
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/${mint}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const targetUrl = `https://frontend-api-v2.pump.fun/coins/${mint}`;
+    const { data, endpoint } = await fetchWithFallback(targetUrl);
+    
     setCacheData(cacheKey, data);
     
     res.json({
       success: true,
-      data: data
+      data: data,
+      endpoint: endpoint
     });
   } catch (error) {
-    console.error('Error fetching Pump.fun token:', error.message);
+    console.error('[Pump.fun] Error fetching token:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -139,24 +198,19 @@ app.get('/api/pumpfun/token/:mint/trades', async (req, res) => {
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    const response = await fetch(
-      `https://frontend-api-v2.pump.fun/coins/${mint}/trades?limit=${limit}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Pump.fun API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const targetUrl = `https://frontend-api-v2.pump.fun/coins/${mint}/trades?limit=${limit}`;
+    const { data, endpoint } = await fetchWithFallback(targetUrl);
+    
     setCacheData(cacheKey, data);
     
     res.json({
       success: true,
       data: data,
-      count: data.length
+      count: data.length,
+      endpoint: endpoint
     });
   } catch (error) {
-    console.error('Error fetching Pump.fun trades:', error.message);
+    console.error('[Pump.fun] Error fetching trades:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -167,6 +221,75 @@ app.get('/api/pumpfun/token/:mint/trades', async (req, res) => {
 // ============================================
 // ENDPOINTS DE RAYDIUM
 // ============================================
+
+// Configuración de endpoints para Raydium con múltiples opciones
+const RAYDIUM_ENDPOINTS = [
+  // Directo (puede tener CORS issues)
+  'https://api-v3.raydium.io',
+  // Proxies CORS públicos como fallback
+  'https://api.allorigins.win/raw?url=',
+  'https://corsproxy.io/?',
+  'https://api.codetabs.com/v1/proxy?quest='
+];
+
+let currentRaydiumIndex = 0;
+let raydiumLastSuccess = 0;
+
+// Función para rotar entre endpoints de Raydium
+function rotateRaydiumEndpoint() {
+  currentRaydiumIndex = (currentRaydiumIndex + 1) % RAYDIUM_ENDPOINTS.length;
+  console.log(`[Raydium] Rotated to endpoint: ${RAYDIUM_ENDPOINTS[currentRaydiumIndex]}`);
+}
+
+// Función auxiliar para hacer fetch con fallback para Raydium
+async function fetchRaydiumWithFallback(url, options = {}) {
+  const errors = [];
+  
+  for (let i = 0; i < RAYDIUM_ENDPOINTS.length; i++) {
+    const endpointIndex = (currentRaydiumIndex + i) % RAYDIUM_ENDPOINTS.length;
+    const endpoint = RAYDIUM_ENDPOINTS[endpointIndex];
+    
+    try {
+      let fetchUrl;
+      
+      // Si es un proxy CORS, necesitamos codificar la URL
+      if (endpoint.includes('allorigins') || endpoint.includes('corsproxy') || endpoint.includes('codetabs')) {
+        fetchUrl = `${endpoint}${encodeURIComponent(url)}`;
+      } else {
+        fetchUrl = url;
+      }
+      
+      console.log(`[Raydium] Attempt ${i + 1}/${RAYDIUM_ENDPOINTS.length} with: ${endpoint}`);
+      
+      const response = await fetch(fetchUrl, {
+        ...options,
+        timeout: 10000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          ...options.headers
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      // Éxito - actualizar índice
+      currentRaydiumIndex = endpointIndex;
+      raydiumLastSuccess = Date.now();
+      
+      return { data, endpoint: RAYDIUM_ENDPOINTS[endpointIndex] };
+    } catch (error) {
+      errors.push(`${endpoint}: ${error.message}`);
+      console.error(`[Raydium] Failed with ${endpoint}:`, error.message);
+    }
+  }
+  
+  throw new Error(`All Raydium endpoints failed. Errors: ${errors.join(', ')}`);
+}
 
 // Obtener pools de Raydium
 app.get('/api/raydium/pools', async (req, res) => {
@@ -182,15 +305,9 @@ app.get('/api/raydium/pools', async (req, res) => {
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    const url = `https://api-v3.raydium.io/pools/info/list?poolType=${poolType}&poolSortField=${sortField}&sortType=desc&pageSize=${pageSize}&page=${page}`;
+    const targetUrl = `https://api-v3.raydium.io/pools/info/list?poolType=${poolType}&poolSortField=${sortField}&sortType=desc&pageSize=${pageSize}&page=${page}`;
     
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      throw new Error(`Raydium API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const { data, endpoint } = await fetchRaydiumWithFallback(targetUrl);
     
     if (!data.success) {
       throw new Error('Raydium API returned unsuccessful response');
@@ -202,10 +319,11 @@ app.get('/api/raydium/pools', async (req, res) => {
       success: true,
       data: data.data,
       count: data.data?.data?.length || 0,
+      endpoint: endpoint,
       timestamp: Date.now()
     });
   } catch (error) {
-    console.error('Error fetching Raydium pools:', error.message);
+    console.error('[Raydium] Error fetching pools:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -224,15 +342,8 @@ app.get('/api/raydium/pool/:id', async (req, res) => {
       return res.json({ success: true, data: cached, cached: true });
     }
 
-    const response = await fetch(
-      `https://api-v3.raydium.io/pools/info/ids?ids=${id}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`Raydium API error: ${response.status}`);
-    }
-
-    const data = await response.json();
+    const targetUrl = `https://api-v3.raydium.io/pools/info/ids?ids=${id}`;
+    const { data, endpoint } = await fetchRaydiumWithFallback(targetUrl);
     
     if (!data.success) {
       throw new Error('Raydium API returned unsuccessful response');
@@ -242,10 +353,11 @@ app.get('/api/raydium/pool/:id', async (req, res) => {
     
     res.json({
       success: true,
-      data: data.data
+      data: data.data,
+      endpoint: endpoint
     });
   } catch (error) {
-    console.error('Error fetching Raydium pool:', error.message);
+    console.error('[Raydium] Error fetching pool:', error.message);
     res.status(500).json({
       success: false,
       error: error.message
@@ -401,14 +513,101 @@ app.get('/api/solana/token/:mint', async (req, res) => {
 // ENDPOINTS DE UTILIDAD
 // ============================================
 
-// Health check
+// Health check mejorado
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
     status: 'ok',
     timestamp: Date.now(),
     uptime: process.uptime(),
-    cache_size: cache.size
+    cache_size: cache.size,
+    connections: {
+      pumpfun: {
+        current_endpoint: PUMPFUN_ENDPOINTS[currentPumpFunIndex],
+        last_success: pumpFunLastSuccess,
+        available_endpoints: PUMPFUN_ENDPOINTS.length
+      },
+      raydium: {
+        current_endpoint: RAYDIUM_ENDPOINTS[currentRaydiumIndex],
+        last_success: raydiumLastSuccess,
+        available_endpoints: RAYDIUM_ENDPOINTS.length
+      },
+      solana: {
+        current_rpc: RPC_ENDPOINTS[currentRpcIndex],
+        available_rpcs: RPC_ENDPOINTS.length
+      }
+    }
+  });
+});
+
+// Diagnóstico completo de conexiones
+app.get('/api/diagnose', async (req, res) => {
+  const results = {
+    timestamp: Date.now(),
+    pumpfun: { status: 'unknown', error: null, endpoint: null },
+    raydium: { status: 'unknown', error: null, endpoint: null },
+    solana: { status: 'unknown', error: null, rpc: null }
+  };
+
+  // Probar Pump.fun
+  try {
+    const testUrl = 'https://frontend-api-v2.pump.fun/coins/latest-metadatas?limit=1&offset=0';
+    const { endpoint } = await fetchWithFallback(testUrl);
+    results.pumpfun = { status: 'ok', endpoint: endpoint };
+  } catch (error) {
+    results.pumpfun = { status: 'error', error: error.message };
+  }
+
+  // Probar Raydium
+  try {
+    const testUrl = 'https://api-v3.raydium.io/pools/info/list?poolType=all&poolSortField=default&sortType=desc&pageSize=1&page=1';
+    const { endpoint } = await fetchRaydiumWithFallback(testUrl);
+    results.raydium = { status: 'ok', endpoint: endpoint };
+  } catch (error) {
+    results.raydium = { status: 'error', error: error.message };
+  }
+
+  // Probar Solana
+  try {
+    await solanaConnection.getVersion();
+    results.solana = { status: 'ok', rpc: RPC_ENDPOINTS[currentRpcIndex] };
+  } catch (error) {
+    results.solana = { status: 'error', error: error.message };
+  }
+
+  res.json({
+    success: true,
+    results: results
+  });
+});
+
+// Forzar reconexión de Pump.fun
+app.post('/api/pumpfun/reconnect', (req, res) => {
+  rotatePumpFunEndpoint();
+  res.json({
+    success: true,
+    message: 'Pump.fun endpoint rotated',
+    new_endpoint: PUMPFUN_ENDPOINTS[currentPumpFunIndex]
+  });
+});
+
+// Forzar reconexión de Raydium
+app.post('/api/raydium/reconnect', (req, res) => {
+  rotateRaydiumEndpoint();
+  res.json({
+    success: true,
+    message: 'Raydium endpoint rotated',
+    new_endpoint: RAYDIUM_ENDPOINTS[currentRaydiumIndex]
+  });
+});
+
+// Forzar reconexión de Solana
+app.post('/api/solana/reconnect', (req, res) => {
+  rotateRpc();
+  res.json({
+    success: true,
+    message: 'Solana RPC rotated',
+    new_rpc: RPC_ENDPOINTS[currentRpcIndex]
   });
 });
 
@@ -420,7 +619,23 @@ app.get('/api/stats', (req, res) => {
       cache_size: cache.size,
       uptime: process.uptime(),
       memory_usage: process.memoryUsage(),
-      node_version: process.version
+      node_version: process.version,
+      connections: {
+        pumpfun: {
+          current_endpoint: PUMPFUN_ENDPOINTS[currentPumpFunIndex],
+          last_success: pumpFunLastSuccess,
+          available_endpoints: PUMPFUN_ENDPOINTS.length
+        },
+        raydium: {
+          current_endpoint: RAYDIUM_ENDPOINTS[currentRaydiumIndex],
+          last_success: raydiumLastSuccess,
+          available_endpoints: RAYDIUM_ENDPOINTS.length
+        },
+        solana: {
+          current_rpc: RPC_ENDPOINTS[currentRpcIndex],
+          available_rpcs: RPC_ENDPOINTS.length
+        }
+      }
     }
   });
 });
@@ -471,18 +686,27 @@ app.listen(PORT, () => {
 ║   - GET  /api/pumpfun/tokens                              ║
 ║   - GET  /api/pumpfun/token/:mint                         ║
 ║   - GET  /api/pumpfun/token/:mint/trades                  ║
+║   - POST /api/pumpfun/reconnect                           ║
 ║   - GET  /api/raydium/pools                               ║
 ║   - GET  /api/raydium/pool/:id                            ║
+║   - POST /api/raydium/reconnect                           ║
 ║   - GET  /api/solana/version                              ║
 ║   - GET  /api/solana/balance/:address                     ║
 ║   - GET  /api/solana/token/:mint                          ║
+║   - POST /api/solana/reconnect                            ║
 ║   - GET  /api/health                                      ║
+║   - GET  /api/diagnose                                    ║
 ║   - GET  /api/stats                                       ║
 ║   - POST /api/cache/clear                                 ║
 ║                                                           ║
 ║   🔧 Configuración:                                       ║
 ║   - Puerto: ${PORT}                                       ║
 ║   - RPC: ${process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com'}
+║                                                           ║
+║   🔄 Sistema de Fallback Activo:                          ║
+║   - Pump.fun: ${PUMPFUN_ENDPOINTS.length} endpoints       ║
+║   - Raydium: ${RAYDIUM_ENDPOINTS.length} endpoints        ║
+║   - Solana: ${RPC_ENDPOINTS.length} RPCs                  ║
 ║                                                           ║
 ╚═══════════════════════════════════════════════════════════╝
   `);
