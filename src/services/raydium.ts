@@ -40,6 +40,7 @@ export interface RaydiumPool {
 
 class RaydiumService {
   private baseUrl = 'https://api-v3.raydium.io';
+  private corsProxy = 'https://api.allorigins.win/raw?url=';
   private tokens: RaydiumToken[] = [];
   private pools: RaydiumPool[] = [];
   private lastFetch = 0;
@@ -48,6 +49,7 @@ class RaydiumService {
   private pollIntervalId: ReturnType<typeof setInterval> | null = null;
   private listeners: ((tokens: RaydiumToken[]) => void)[] = [];
   private useFallback = false;
+  private useCorsProxy = true; // Usar proxy CORS por defecto
 
   constructor() {}
 
@@ -85,11 +87,17 @@ class RaydiumService {
   // Obtener pools nuevos de Raydium (incluye Launchpad)
   async fetchNewPools(limit: number = 50): Promise<RaydiumPool[]> {
     try {
-      console.log('[Raydium] Fetching pools...', { limit });
+      const targetUrl = `${this.baseUrl}/pools/info/list?poolType=all&poolSortField=default&sortType=desc&pageSize=${limit}&page=1`;
+      const fetchUrl = this.useCorsProxy ? `${this.corsProxy}${encodeURIComponent(targetUrl)}` : targetUrl;
       
-      const response = await fetch(
-        `${this.baseUrl}/pools/info/list?poolType=all&poolSortField=default&sortType=desc&pageSize=${limit}&page=1`
-      );
+      console.log('[Raydium] Fetching pools...', { 
+        limit,
+        originalUrl: targetUrl,
+        fetchUrl: fetchUrl,
+        usingProxy: this.useCorsProxy
+      });
+      
+      const response = await fetch(fetchUrl);
       
       console.log('[Raydium] Response status:', response.status);
       

@@ -85,18 +85,26 @@ export default function ConnectionStatus() {
   const testSolanaConnection = async () => {
     try {
       const start = Date.now();
+      
+      // Usar un método RPC que siempre funcione
       const response = await fetch(status.solana.rpcEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           jsonrpc: '2.0',
           id: 1,
-          method: 'getHealth',
+          method: 'getVersion',
         }),
       });
+      
       const latency = Date.now() - start;
       
       if (response.ok) {
+        const data = await response.json();
+        console.log('[Solana RPC] Connected:', data);
+        
         setStatus(prev => ({
           ...prev,
           solana: {
@@ -110,6 +118,7 @@ export default function ConnectionStatus() {
         throw new Error(`HTTP ${response.status}`);
       }
     } catch (error) {
+      console.error('[Solana RPC] Error:', error);
       setStatus(prev => ({
         ...prev,
         solana: {
@@ -251,6 +260,10 @@ export default function ConnectionStatus() {
               </span>
             </div>
             <div className="flex justify-between">
+              <span className="text-gray-400">Modo:</span>
+              <span className="text-gray-300">{status.pumpfun.mode}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-400">Tokens:</span>
               <span className="text-white font-semibold">{status.pumpfun.tokenCount}</span>
             </div>
@@ -263,6 +276,10 @@ export default function ConnectionStatus() {
             <div className="flex justify-between">
               <span className="text-gray-400">Última actualización:</span>
               <span className="text-gray-300">{formatTime(status.pumpfun.lastUpdate)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Proxy CORS:</span>
+              <span className="text-blue-400">Activo</span>
             </div>
             {status.pumpfun.error && (
               <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
@@ -298,6 +315,10 @@ export default function ConnectionStatus() {
               </span>
             </div>
             <div className="flex justify-between">
+              <span className="text-gray-400">Modo:</span>
+              <span className="text-gray-300">{status.raydium.mode}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-400">Tokens:</span>
               <span className="text-white font-semibold">{status.raydium.tokenCount}</span>
             </div>
@@ -310,6 +331,10 @@ export default function ConnectionStatus() {
             <div className="flex justify-between">
               <span className="text-gray-400">Última actualización:</span>
               <span className="text-gray-300">{formatTime(status.raydium.lastUpdate)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-400">Proxy CORS:</span>
+              <span className="text-blue-400">Activo</span>
             </div>
             {status.raydium.error && (
               <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
@@ -449,10 +474,16 @@ export default function ConnectionStatus() {
           <p>
             <span className="font-semibold text-red-400">❌ OFF:</span> Sin conexión o no inicializado
           </p>
-          <p className="mt-3 text-xs text-gray-400">
-            <strong>Nota:</strong> Las APIs de pump.fun y Raydium pueden estar bloqueadas por CORS en el navegador. 
-            Para producción, se requiere un servidor proxy o backend que haga las llamadas a las APIs.
-          </p>
+          <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+            <p className="text-xs text-blue-300 font-semibold mb-1">🔒 Proxy CORS Activo</p>
+            <p className="text-xs text-gray-400">
+              El bot usa un proxy CORS (<code className="bg-gray-800 px-1 rounded">api.allorigins.win</code>) para evitar bloqueos del navegador. 
+              Esto permite acceder a las APIs de pump.fun y Raydium directamente desde el frontend.
+            </p>
+            <p className="text-xs text-gray-400 mt-2">
+              <strong>Para producción:</strong> Se recomienda usar tu propio servidor proxy o backend para mayor confiabilidad y velocidad.
+            </p>
+          </div>
         </div>
       </div>
     </div>
