@@ -119,6 +119,7 @@ export default function ConnectionStatus() {
           solana: {
             ...prev.solana,
             connected: true,
+            rpcEndpoint: data.solana?.rpcUrl || prev.solana.rpcEndpoint,
             latency,
             error: undefined,
           },

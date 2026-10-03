@@ -19,6 +19,7 @@ class SolanaConnectionError extends Error {
 class SolanaConnectionManager {
   constructor() {
     this.config = getConfig();
+    this.activeRpcUrl = this.config.solanaRpcUrl;
     this.httpConnection = null;
     this.wsConnection = null;
     this.fallbackHttpConnection = null;
@@ -147,6 +148,9 @@ class SolanaConnectionManager {
     this.fallbackHttpConnection = temp;
     
     this.status.usingFallback = !this.status.usingFallback;
+    this.activeRpcUrl = this.status.usingFallback
+      ? this.config.solanaRpcFallback
+      : this.config.solanaRpcUrl;
     this.status.httpConnected = true;
     this.status.wsConnected = false;
     this.status.lastHealthCheck = Date.now();
@@ -277,7 +281,7 @@ class SolanaConnectionManager {
     return {
       ...this.status,
       usingFallback: this.status.usingFallback,
-      rpcUrl: this.config.solanaRpcUrl.substring(0, 50) + '...',
+      rpcUrl: this.activeRpcUrl ? this.activeRpcUrl.substring(0, 50) + '...' : 'No configurado',
       reconnectAttempts: this.reconnectAttempts
     };
   }
