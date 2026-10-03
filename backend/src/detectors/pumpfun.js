@@ -18,6 +18,9 @@ class PumpFunDetector {
     this.subscriptionId = null;
     this.isListening = false;
     this.lastProcessedSlot = null;
+    this.watchdogInterval = null;
+    this.reconnectInProgress = false;
+    this.unsubscribeConnectionChange = null;
     
     // Deduplicación
     this.processedSignatures = new Set();
@@ -41,29 +44,61 @@ class PumpFunDetector {
     this.pumpProgramId = new PublicKey(this.config.pumpProgramId);
   }
 
+  async subscribe() {
+    const connection = this.connectionManager.getConnection();
+    this.subscriptionId = await connection.onLogs(
+      this.pumpProgramId,
+      async (logs, context) => {
+        await this.handleLogs(logs, context);
+      },
+      this.config.commitmentProcessed
+    );
+    this.isListening = true;
+    this.connectionManager.setWebSocketStatus(true);
+    console.log('[PumpFun] ✅ Suscrito a logs del programa Pump.fun');
+    console.log(`[PumpFun] Subscription ID: ${this.subscriptionId}`);
+  }
+
   async start() {
     console.log('[PumpFun] Iniciando detector on-chain...');
-    
     try {
-      const connection = this.connectionManager.getConnection();
-      
-      // Suscribir a logs del programa Pump.fun
-      this.subscriptionId = connection.onLogs(
-        this.pumpProgramId,
-        async (logs, context) => {
-          await this.handleLogs(logs, context);
-        },
-        this.config.commitmentProcessed
-      );
-      
-      this.isListening = true;
-      this.connectionManager.setWebSocketStatus(true);
-      console.log('[PumpFun] ✅ Suscrito a logs del programa Pump.fun');
-      console.log(`[PumpFun] Subscription ID: ${this.subscriptionId}`);
-      
+      await this.subscribe();
+      this.unsubscribeConnectionChange = this.connectionManager.onConnectionChange(async () => {
+        await this.reconnectSubscription('cambio de RPC');
+      });
+      this.watchdogInterval = setInterval(() => {
+        const lastEvent = this.metrics.lastEventAt || Date.now();
+        if (this.isListening && Date.now() - lastEvent > 90000) {
+          void this.reconnectSubscription('90s sin eventos');
+        }
+      }, 30000);
     } catch (error) {
       console.error('[PumpFun] ❌ Error iniciando detector:', error.message);
       throw error;
+    }
+  }
+
+  async reconnectSubscription(reason) {
+    if (this.reconnectInProgress || !this.isListening) return;
+    this.reconnectInProgress = true;
+    const previousId = this.subscriptionId;
+    this.subscriptionId = null;
+    this.isListening = false;
+    this.connectionManager.setWebSocketStatus(false);
+    try {
+      if (previousId !== null) {
+        try {
+          await this.connectionManager.getConnection().removeOnLogsListener(previousId);
+        } catch (error) {
+          console.warn('[PumpFun] No se pudo retirar la suscripción anterior:', error.message);
+        }
+      }
+      console.warn(`[PumpFun] Renovando suscripción (${reason})...`);
+      await this.subscribe();
+    } catch (error) {
+      console.error('[PumpFun] Error renovando suscripción:', error.message);
+    } finally {
+      this.reconnectInProgress = false;
     }
   }
 
@@ -237,6 +272,15 @@ class PumpFunDetector {
 
   async stop() {
     console.log('[PumpFun] Deteniendo detector...');
+
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+    }
+    if (this.unsubscribeConnectionChange) {
+      this.unsubscribeConnectionChange();
+      this.unsubscribeConnectionChange = null;
+    }
     
     if (this.subscriptionId !== null) {
       try {

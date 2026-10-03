@@ -42,6 +42,7 @@ class SolanaConnectionManager {
     
     this.healthCheckInterval = null;
     this.heartbeatInterval = null;
+    this.connectionChangeListeners = new Set();
   }
 
   async initialize() {
@@ -145,10 +146,18 @@ class SolanaConnectionManager {
     this.httpConnection = this.fallbackHttpConnection;
     this.fallbackHttpConnection = temp;
     
-    this.status.usingFallback = true;
+    this.status.usingFallback = !this.status.usingFallback;
     this.status.httpConnected = true;
+    this.status.wsConnected = false;
     this.status.lastHealthCheck = Date.now();
-    console.log('[Solana] ✅ Cambiado a RPC de respaldo');
+    console.log(`[Solana] ✅ Cambiado a RPC ${this.status.usingFallback ? 'de respaldo' : 'principal'}`);
+    for (const listener of this.connectionChangeListeners) {
+      try {
+        await listener({ usingFallback: this.status.usingFallback });
+      } catch (error) {
+        console.error('[Solana] Error notificando cambio de RPC:', error.message);
+      }
+    }
   }
 
   startHealthChecks() {
@@ -202,6 +211,17 @@ class SolanaConnectionManager {
       };
     } catch (error) {
       this.status.httpConnected = false;
+      if (this.fallbackHttpConnection) {
+        try {
+          await this.switchToFallback();
+          return { healthy: true, usingFallback: this.status.usingFallback };
+        } catch (fallbackError) {
+          throw new SolanaConnectionError(
+            `Health check falló en ambos RPCs. Principal: ${error.message}, Alterno: ${fallbackError.message}`,
+            'ALL_RPCS_FAILED'
+          );
+        }
+      }
       throw new SolanaConnectionError(`Health check falló: ${error.message}`, 'HEALTH_CHECK_FAILED');
     }
   }
@@ -228,6 +248,11 @@ class SolanaConnectionManager {
     if (connected) {
       this.status.lastEventAt = Date.now();
     }
+  }
+
+  onConnectionChange(callback) {
+    this.connectionChangeListeners.add(callback);
+    return () => this.connectionChangeListeners.delete(callback);
   }
 
   async getSlot() {

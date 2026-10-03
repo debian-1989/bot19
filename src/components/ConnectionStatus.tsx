@@ -208,6 +208,13 @@ export default function ConnectionStatus() {
     void testAllConnections();
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      void testSolanaConnection();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
   const formatTime = (timestamp: number) => {
     if (timestamp === 0) return 'Nunca';
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
