@@ -32,7 +32,11 @@ const PORT = config.port;
 
 // Middleware
 app.use(cors({
-  origin: config.corsOrigins,
+  origin: (origin, callback) => {
+    const isLocalDevelopment = !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+    const isConfigured = origin && config.corsOrigins.includes(origin);
+    callback(null, isLocalDevelopment || isConfigured ? origin || '*' : false);
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -53,6 +57,7 @@ let connectionManager;
 let pumpFunDetector;
 const recentPumpFunTokens = [];
 const MAX_RECENT_PUMP_FUN_TOKENS = 500;
+let pumpFunApiCache = { fetchedAt: 0, tokens: [] };
 
 function rememberPumpFunToken(event) {
   const exists = recentPumpFunTokens.some((token) => token.mint === event.mint || token.signature === event.signature);
@@ -60,6 +65,56 @@ function rememberPumpFunToken(event) {
   recentPumpFunTokens.unshift(event);
   if (recentPumpFunTokens.length > MAX_RECENT_PUMP_FUN_TOKENS) {
     recentPumpFunTokens.length = MAX_RECENT_PUMP_FUN_TOKENS;
+  }
+}
+
+function normalizePumpFunToken(token) {
+  return {
+    ...token,
+    mint: token.mint,
+    name: token.name || `Token_${String(token.mint).slice(0, 8)}`,
+    symbol: token.symbol || String(token.mint).slice(0, 6).toUpperCase(),
+    description: token.description || '',
+    image_uri: token.image_uri || token.image || '',
+    created_timestamp: token.created_timestamp || token.createdAt || Date.now(),
+    raydium_pool: token.raydium_pool || null,
+    complete: Boolean(token.complete),
+    virtual_sol_reserves: Number(token.virtual_sol_reserves || 0),
+    virtual_token_reserves: Number(token.virtual_token_reserves || 0),
+    total_supply: Number(token.total_supply || 0),
+    market_cap: Number(token.market_cap || 0),
+    king_of_the_hill_timestamp: Number(token.king_of_the_hill_timestamp || 0),
+    usd_market_cap: Number(token.usd_market_cap || 0)
+  };
+}
+
+async function fetchRecentPumpFunTokens(limit) {
+  const now = Date.now();
+  if (now - pumpFunApiCache.fetchedAt < 1000 && pumpFunApiCache.tokens.length > 0) {
+    return pumpFunApiCache.tokens.slice(0, limit);
+  }
+
+  const url = new URL('https://frontend-api-v3.pump.fun/coins');
+  url.searchParams.set('offset', '0');
+  url.searchParams.set('limit', String(Math.min(limit, 200)));
+  url.searchParams.set('sort', 'created_timestamp');
+  url.searchParams.set('order', 'DESC');
+  url.searchParams.set('includeNsfw', 'false');
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const response = await fetch(url.toString(), {
+      signal: controller.signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'pumpfun-sniper-bot/2.0' }
+    });
+    if (!response.ok) throw new Error(`Pump.fun API HTTP ${response.status}`);
+    const payload = await response.json();
+    const rawTokens = Array.isArray(payload) ? payload : payload.data || [];
+    pumpFunApiCache = { fetchedAt: now, tokens: rawTokens.map(normalizePumpFunToken) };
+    return pumpFunApiCache.tokens.slice(0, limit);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -259,11 +314,26 @@ app.get('/api/config', (req, res) => {
 
 app.get('/api/pumpfun/tokens', async (req, res) => {
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit || '100', 10) || 100, 1), 500);
+  let apiTokens = [];
+  let apiError = null;
+  try {
+    apiTokens = await fetchRecentPumpFunTokens(limit);
+  } catch (error) {
+    apiError = error.message;
+    console.warn('[Pump.fun] Feed HTTP no disponible, usando buffer on-chain:', apiError);
+  }
+
+  const merged = [...recentPumpFunTokens.map(normalizePumpFunToken), ...apiTokens];
+  const unique = Array.from(new Map(
+    merged.filter((token) => token.mint).map((token) => [token.mint, token])
+  ).values()).slice(0, limit);
+
   res.json({
     success: true,
-    data: recentPumpFunTokens.slice(0, limit),
-    count: Math.min(recentPumpFunTokens.length, limit),
-    source: 'pumpfun-on-chain-websocket',
+    data: unique,
+    count: unique.length,
+    source: apiTokens.length > 0 ? 'pumpfun-api-v3-plus-on-chain' : 'pumpfun-on-chain-websocket',
+    warning: apiError || undefined,
     timestamp: Date.now()
   });
 });

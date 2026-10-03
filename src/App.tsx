@@ -79,6 +79,7 @@ function App() {
   const solBalanceRef = useRef(solBalance);
   const tokensRef = useRef<PumpFunToken[]>([]);
   const raydiumTokensRef = useRef<RaydiumToken[]>([]);
+  const processedTokenKeysRef = useRef<Set<string>>(new Set());
   
   useEffect(() => {
     configRef.current = config;
@@ -102,28 +103,6 @@ function App() {
     // Suscribirse específicamente a tokens NUEVOS
     const unsubscribeNew = pumpFunRealService.onNewTokens((newTokens) => {
       addLog(`🆕 ${newTokens.length} token(s) NUEVO(S) detectado(s) en pump.fun`);
-      
-      // Priorizar tokens nuevos para detección inmediata
-      newTokens.forEach(token => {
-        const buyAmount = parseFloat((Math.random() * 15 + 0.001).toFixed(3));
-        const realPrice = pumpFunRealService.calculateTokenPrice(token);
-        
-        const newTx: DetectedTransaction = {
-          id: generateId(),
-          timestamp: new Date(),
-          buyerAddress: randomAddress(),
-          tokenAddress: token.mint,
-          tokenName: token.name,
-          tokenSymbol: token.symbol,
-          buyAmount,
-          estimatedPrice: realPrice,
-          status: 'detected',
-          platform: 'pump.fun',
-        };
-
-        setDetectedTxns(prev => [newTx, ...prev].slice(0, 100));
-        addLog(`🔍 Detectada: ${buyAmount} SOL en $${token.symbol} (NUEVO)`);
-      });
     });
 
     return () => {
@@ -163,48 +142,24 @@ function App() {
         raydiumTokens: currentRaydiumTokens.length,
       });
 
-      // Combinar tokens de ambas plataformas
-      const totalTokens = currentPumpTokens.length + currentRaydiumTokens.length;
-      
-      // Si no hay tokens de ninguna plataforma, esperar
-      if (totalTokens === 0) {
-        console.log('[App] No tokens available, waiting...');
+      const candidates = [
+        ...currentPumpTokens.map(token => ({ token, platform: 'pump.fun' as const, price: pumpFunRealService.calculateTokenPrice(token) })),
+        ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 }))
+      ].filter(candidate => !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`));
+
+      if (candidates.length === 0) {
         return;
       }
 
-      // Decidir de qué plataforma obtener el token (60% pump.fun, 40% raydium)
-      // pump.fun tiene más tokens nuevos, así que le damos prioridad
-      let token: any;
-      let platform: 'pump.fun' | 'raydium';
-      let realPrice: number;
-
-      if (currentPumpTokens.length > 0 && currentRaydiumTokens.length > 0) {
-        // Ambas plataformas tienen tokens, elegir con prioridad a pump.fun
-        if (Math.random() < 0.6) {
-          // Priorizar tokens más recientes de pump.fun (primeros 50)
-          const recentTokens = currentPumpTokens.slice(0, 50);
-          token = recentTokens[Math.floor(Math.random() * recentTokens.length)];
-          platform = 'pump.fun';
-          realPrice = pumpFunRealService.calculateTokenPrice(token);
-        } else {
-          token = currentRaydiumTokens[Math.floor(Math.random() * currentRaydiumTokens.length)];
-          platform = 'raydium';
-          realPrice = token.price || 0.0001;
-        }
-      } else if (currentPumpTokens.length > 0) {
-        // Priorizar tokens más recientes
-        const recentTokens = currentPumpTokens.slice(0, 50);
-        token = recentTokens[Math.floor(Math.random() * recentTokens.length)];
-        platform = 'pump.fun';
-        realPrice = pumpFunRealService.calculateTokenPrice(token);
-      } else {
-        token = currentRaydiumTokens[Math.floor(Math.random() * currentRaydiumTokens.length)];
-        platform = 'raydium';
-        realPrice = token.price || 0.0001;
-      }
-      
-      // Simular una compra (monto aleatorio entre 0.001 y 15 SOL)
-      const buyAmount = parseFloat((Math.random() * 15 + 0.001).toFixed(3));
+      // Las respuestas vienen ordenadas por reciente/actividad. Procesamos cada
+      // mint real una sola vez para no simular compras repetidas del mismo token.
+      const candidate = candidates[0];
+      const token = candidate.token;
+      const platform = candidate.platform;
+      const realPrice = candidate.price;
+      const tokenKey = `${platform}:${token.mint}`;
+      processedTokenKeysRef.current.add(tokenKey);
+      const buyAmount = Number(currentConfig.tradeAmount.toFixed(3));
       
       const newTx: DetectedTransaction = {
         id: generateId(),

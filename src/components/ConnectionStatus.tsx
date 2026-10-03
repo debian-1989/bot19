@@ -73,7 +73,7 @@ export default function ConnectionStatus() {
         ...prev,
         pumpfun: {
           ...prev.pumpfun,
-          connected: pumpStatus.connected,
+          connected: pumpStatus.isConnected,
           tokenCount: pumpStatus.tokenCount,
           lastUpdate: pumpStatus.lastUpdate,
           polling: pumpStatus.connected,
@@ -84,7 +84,7 @@ export default function ConnectionStatus() {
         },
         raydium: {
           ...prev.raydium,
-          connected: rayStatus.connected,
+          connected: rayStatus.isConnected,
           tokenCount: rayStatus.tokenCount,
           lastUpdate: rayStatus.lastUpdate,
           polling: rayStatus.connected,
@@ -203,6 +203,10 @@ export default function ConnectionStatus() {
     ]);
     setTesting(false);
   };
+
+  useEffect(() => {
+    void testAllConnections();
+  }, []);
 
   const formatTime = (timestamp: number) => {
     if (timestamp === 0) return 'Nunca';

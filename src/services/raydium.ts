@@ -142,25 +142,34 @@ class RaydiumService {
 
   // Convertir pools a formato de tokens
   private convertPoolsToTokens(pools: RaydiumPool[]): RaydiumToken[] {
-    return pools
-      .filter(pool => pool.mintA.symbol !== 'SOL' && pool.mintB.symbol === 'SOL')
-      .map(pool => ({
+    const tokens: RaydiumToken[] = [];
+    for (const pool of pools) {
+      const isSol = (mint: { symbol: string; mint: string }) =>
+        mint.symbol === 'SOL' || mint.symbol === 'WSOL' || mint.mint === 'So11111111111111111111111111111111111111112';
+      const tokenSide = isSol(pool.mintA) ? pool.mintB : pool.mintA;
+      const hasSolPair = isSol(pool.mintA) || isSol(pool.mintB);
+      if (!hasSolPair || !tokenSide?.mint) continue;
+
+      tokens.push({
         id: pool.id,
-        mint: pool.mintA.mint,
-        symbol: pool.mintA.symbol,
-        name: pool.mintA.symbol,
-        decimals: pool.mintA.decimals,
+        mint: tokenSide.mint,
+        symbol: tokenSide.symbol,
+        name: tokenSide.symbol,
+        decimals: tokenSide.decimals,
         logoURI: '',
         tags: [],
-        daily_volume: pool.volume24h,
-        daily_volume_usd: pool.volume24h * pool.price,
-        price: pool.price,
-        liquidity: pool.liquidity,
-        liquidity_usd: pool.liquidity * pool.price,
-        market_cap: pool.liquidity * pool.price * 10,
-        market_cap_usd: pool.liquidity * pool.price * 10,
-        create_time: Date.now() - Math.random() * 86400000,
-      }));
+        daily_volume: Number(pool.volume24h || 0),
+        daily_volume_usd: Number(pool.volume24h || 0) * Number(pool.price || 0),
+        price: Number(pool.price || 0),
+        liquidity: Number(pool.liquidity || 0),
+        liquidity_usd: Number(pool.liquidity || 0) * Number(pool.price || 0),
+        market_cap: Number(pool.liquidity || 0) * Number(pool.price || 0) * 10,
+        market_cap_usd: Number(pool.liquidity || 0) * Number(pool.price || 0) * 10,
+        create_time: Number((pool as RaydiumPool & { createTime?: number; openTime?: number }).createTime ||
+          (pool as RaydiumPool & { openTime?: number }).openTime || Date.now()),
+      });
+    }
+    return tokens;
   }
 
   // Obtener información de un token específico
