@@ -16,6 +16,7 @@ const fetch = require('node-fetch');
 const { getConfig } = require('./src/config');
 const { getConnectionManager } = require('./src/solana/connection');
 const { getPumpFunDetector } = require('./src/detectors/pumpfun');
+const { SessionWallet } = require('./src/wallet/session-wallet');
 
 // Validar configuración al inicio
 let config;
@@ -55,6 +56,7 @@ app.use((req, res, next) => {
 
 let connectionManager;
 let pumpFunDetector;
+let sessionWallet;
 const recentPumpFunTokens = [];
 const MAX_RECENT_PUMP_FUN_TOKENS = 500;
 let pumpFunApiCache = { fetchedAt: 0, tokens: [] };
@@ -305,6 +307,26 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+app.get('/api/wallet/status', async (req, res) => {
+  try {
+    if (!sessionWallet) return res.status(503).json({ success: false, error: 'Wallet no inicializada' });
+    return res.json({ success: true, data: await sessionWallet.getStatus() });
+  } catch (error) {
+    return res.status(503).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/wallet/withdraw', async (req, res) => {
+  try {
+    const { destination, amountSol, confirmed } = req.body || {};
+    if (confirmed !== true) return res.status(400).json({ success: false, error: 'Debes confirmar explícitamente el retiro' });
+    const result = await sessionWallet.withdraw(destination, amountSol, confirmed);
+    return res.json({ success: true, data: result });
+  } catch (error) {
+    return res.status(400).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================
 // ENDPOINTS AUXILIARES (COMPATIBILIDAD)
 // ============================================
@@ -402,6 +424,9 @@ async function initializeServices() {
     connectionManager = getConnectionManager();
     await connectionManager.initialize();
     console.log('[Init] ✅ Solana conectado\n');
+    sessionWallet = new SessionWallet(connectionManager, config);
+    sessionWallet.start();
+    console.log('[Init] ✅ Wallet de sesión inicializada\n');
   } catch (error) {
     console.error('[Init] ❌ Error conectando a Solana:', error.message);
     console.error('[Init] Verifica tu SOLANA_RPC_URL en .env\n');

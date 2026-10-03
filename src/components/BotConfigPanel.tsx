@@ -37,6 +37,27 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
         <h3 className="font-semibold text-white mb-4">⚙️ Configuración del Bot</h3>
+
+        <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-white">Modo de ejecución</p>
+              <p className="text-xs text-yellow-300/80 mt-1">
+                Demo simula operaciones. Real queda bloqueado hasta habilitar un ejecutor live auditado.
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={isRunning}
+              onClick={() => updateConfig('executionMode', config.executionMode === 'demo' ? 'real' : 'demo')}
+              className={`min-w-28 px-4 py-2 rounded-lg text-sm font-bold ${
+                config.executionMode === 'real' ? 'bg-red-600 text-white' : 'bg-blue-600 text-white'
+              } ${isRunning ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {config.executionMode === 'real' ? '🔴 REAL' : '🔵 DEMO'}
+            </button>
+          </div>
+        </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -103,6 +124,25 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
               onChange={e => updateConfig('stopLossPercent', parseInt(e.target.value) || 30)}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">📉 Slippage máximo (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.1"
+              value={config.slippage}
+              onChange={e => {
+                const value = Number.parseFloat(e.target.value);
+                updateConfig('slippage', Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : 0);
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Variación máxima que aceptarías entre el precio observado y el precio de ejecución.
+            </p>
           </div>
 
           <div>

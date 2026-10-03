@@ -12,6 +12,7 @@ import { pumpFunRealService, PumpFunToken } from './services/pumpfun-real';
 import { raydiumService, RaydiumToken } from './services/raydium';
 
 const defaultConfig: BotConfig = {
+  executionMode: 'demo',
   rpcEndpoint: 'https://api.mainnet-beta.solana.com',
   walletAddress: '',
   tradeAmount: 0.1,
@@ -202,8 +203,18 @@ function App() {
           return;
         }
         
-        // Simular mejor precio de entrada (3-7% mejor que el precio real)
-        const ourBuyPrice = realPrice * (0.93 + Math.random() * 0.04);
+        // Simular deslizamiento adverso dentro/fuera del límite configurado.
+        // Si el movimiento excede el máximo tolerado, la orden paper no entra.
+        const simulatedSlippage = Math.random() * Math.max(currentConfig.slippage * 2, 0.1);
+        if (simulatedSlippage > currentConfig.slippage) {
+          setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? {
+            ...tx,
+            status: 'missed' as const,
+          } : tx));
+          addLog(`⚠️ Entrada omitida: $${token.symbol} | slippage ${simulatedSlippage.toFixed(2)}% > límite ${currentConfig.slippage.toFixed(2)}%`);
+          return;
+        }
+        const ourBuyPrice = realPrice * (1 + simulatedSlippage / 100);
         
         addLog(`⚡ SNIPE: ${snipeAmount.toFixed(3)} SOL en $${token.symbol}`);
         
@@ -359,6 +370,10 @@ function App() {
   }, [trades]);
 
   const toggleBot = () => {
+    if (!isRunning && configRef.current.executionMode === 'real') {
+      addLog('⛔ Modo real bloqueado: el ejecutor de operaciones reales no está habilitado en esta versión.');
+      return;
+    }
     const newRunning = !isRunning;
     setIsRunning(newRunning);
     

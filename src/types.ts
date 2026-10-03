@@ -1,4 +1,5 @@
 export interface BotConfig {
+  executionMode: 'demo' | 'real';
   rpcEndpoint: string;
   walletAddress: string;
   tradeAmount: number;
