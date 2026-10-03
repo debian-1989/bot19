@@ -146,6 +146,27 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
           </div>
 
           <div>
+            <label className="block text-xs text-gray-400 mb-1.5">⚡ Prioridad de transacción</label>
+            <select
+              value={config.gasStrategy}
+              disabled={isRunning}
+              onChange={e => {
+                const strategy = e.target.value as BotConfig['gasStrategy'];
+                const priorityFee = strategy === 'standard' ? 5000 : strategy === 'fast' ? 50000 : 250000;
+                setConfig({ ...config, gasStrategy: strategy, priorityFee });
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none disabled:opacity-50"
+            >
+              <option value="standard">Normal — 5,000 micro-lamports</option>
+              <option value="fast">Rápido — 50,000 micro-lamports</option>
+              <option value="instant">Prioritario — 250,000 micro-lamports</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Una tasa mayor puede ayudar a entrar antes, pero aumenta la comisión. Se aplicará al ejecutor live cuando esté habilitado.
+            </p>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">⏱️ Tiempo Máximo de Posición (segundos)</label>
             <input
               type="number"

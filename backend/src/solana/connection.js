@@ -5,7 +5,7 @@
  * Implementa reconexión automática, health checks y fallback
  */
 
-const { Connection, PublicKey } = require('@solana/web3.js');
+const { Connection, PublicKey, ComputeBudgetProgram, Transaction } = require('@solana/web3.js');
 const { getConfig } = require('../config');
 
 class SolanaConnectionError extends Error {
@@ -266,6 +266,16 @@ class SolanaConnectionManager {
 
   async sendTransaction(transaction, signers) {
     const connection = this.getConnection();
+    if (transaction instanceof Transaction && this.config.selectedPriorityFee > 0) {
+      const hasPriorityInstruction = transaction.instructions.some((instruction) =>
+        instruction.programId.equals(ComputeBudgetProgram.programId)
+      );
+      if (!hasPriorityInstruction) {
+        transaction.add(ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: this.config.selectedPriorityFee
+        }));
+      }
+    }
     return await connection.sendTransaction(transaction, signers, {
       skipPreflight: false,
       preflightCommitment: this.config.commitmentConfirm

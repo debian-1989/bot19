@@ -78,6 +78,16 @@ class Config {
     this.defaultSlippagePercent = parseFloat(process.env.DEFAULT_SLIPPAGE_PERCENT || '5');
     this.maxPriorityFee = parseInt(process.env.MAX_PRIORITY_FEE || '1000000');
     this.defaultPriorityFee = parseInt(process.env.DEFAULT_PRIORITY_FEE || '50000');
+    this.gasStrategy = process.env.GAS_STRATEGY || 'fast';
+    if (!['standard', 'fast', 'instant'].includes(this.gasStrategy)) {
+      throw new ConfigError('GAS_STRATEGY inválida. Debe ser standard, fast o instant');
+    }
+    this.priorityFees = {
+      standard: parseInt(process.env.STANDARD_PRIORITY_FEE || '5000'),
+      fast: parseInt(process.env.FAST_PRIORITY_FEE || '50000'),
+      instant: parseInt(process.env.INSTANT_PRIORITY_FEE || '250000')
+    };
+    this.selectedPriorityFee = Math.min(this.priorityFees[this.gasStrategy], this.maxPriorityFee);
 
     // Detección y filtros
     this.minDetectedBuySize = parseFloat(process.env.MIN_DETECTED_BUY_SIZE || '0.01');
@@ -141,6 +151,8 @@ class Config {
       port: this.port,
       maxConcurrentTrades: this.maxConcurrentTrades,
       tradeAmount: this.tradeAmount,
+      gasStrategy: this.gasStrategy,
+      priorityFee: this.selectedPriorityFee,
       // NO incluir walletPrivateKey, API keys, etc.
     };
   }
