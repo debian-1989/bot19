@@ -12,6 +12,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const fetch = require('node-fetch');
 const { getConfig } = require('./src/config');
 const { getConnectionManager } = require('./src/solana/connection');
 const { getPumpFunDetector } = require('./src/detectors/pumpfun');
@@ -50,6 +51,17 @@ app.use((req, res, next) => {
 
 let connectionManager;
 let pumpFunDetector;
+const recentPumpFunTokens = [];
+const MAX_RECENT_PUMP_FUN_TOKENS = 500;
+
+function rememberPumpFunToken(event) {
+  const exists = recentPumpFunTokens.some((token) => token.mint === event.mint || token.signature === event.signature);
+  if (exists) return;
+  recentPumpFunTokens.unshift(event);
+  if (recentPumpFunTokens.length > MAX_RECENT_PUMP_FUN_TOKENS) {
+    recentPumpFunTokens.length = MAX_RECENT_PUMP_FUN_TOKENS;
+  }
+}
 
 // ============================================
 // ENDPOINTS DE HEALTH CHECK
@@ -61,7 +73,7 @@ let pumpFunDetector;
  */
 app.get('/api/health', async (req, res) => {
   try {
-    const health = {
+      const health = {
       status: 'ok',
       timestamp: Date.now(),
       uptime: process.uptime(),
@@ -75,7 +87,9 @@ app.get('/api/health', async (req, res) => {
       const solanaStatus = connectionManager.getStatus();
       health.components.solana = {
         httpConnected: solanaStatus.httpConnected,
+        wsConnected: solanaStatus.wsConnected,
         lastSlot: solanaStatus.lastSlot,
+        lastEventAt: solanaStatus.lastEventAt,
         latencyMs: solanaStatus.latencyMs,
         lastHealthCheck: solanaStatus.lastHealthCheck,
         usingFallback: solanaStatus.usingFallback
@@ -100,10 +114,11 @@ app.get('/api/health', async (req, res) => {
     // Determinar estado general
     const allHealthy = 
       health.components.solana.httpConnected &&
+      health.components.solana.wsConnected &&
       health.components.pumpFunDetector.isListening;
 
-    health.status = allHealthy ? 'ok' : 'degraded';
-    health.healthy = allHealthy;
+      health.status = allHealthy ? 'ok' : 'degraded';
+      health.healthy = allHealthy;
 
     res.json(health);
   } catch (error) {
@@ -243,30 +258,65 @@ app.get('/api/config', (req, res) => {
 // Pero marcarlos como auxiliares/deprecated
 
 app.get('/api/pumpfun/tokens', async (req, res) => {
-  console.warn('[API] /api/pumpfun/tokens es AUXILIAR. Usa detección on-chain en su lugar.');
-  
-  // Este endpoint mantiene compatibilidad pero NO es la fuente principal
-  // En el futuro, debería obtener datos del detector on-chain
-  
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit || '100', 10) || 100, 1), 500);
   res.json({
     success: true,
-    data: [],
-    count: 0,
-    warning: 'Este endpoint es auxiliar. La detección real es on-chain via WebSocket.',
+    data: recentPumpFunTokens.slice(0, limit),
+    count: Math.min(recentPumpFunTokens.length, limit),
+    source: 'pumpfun-on-chain-websocket',
     timestamp: Date.now()
   });
 });
 
 app.get('/api/raydium/pools', async (req, res) => {
-  console.warn('[API] /api/raydium/pools es AUXILIAR.');
-  
-  res.json({
-    success: true,
-    data: [],
-    count: 0,
-    warning: 'Este endpoint es auxiliar. Implementación pendiente.',
-    timestamp: Date.now()
-  });
+  try {
+    const pageSize = Math.min(Math.max(Number.parseInt(req.query.pageSize || '50', 10) || 50, 1), 100);
+    const page = Math.max(Number.parseInt(req.query.page || '1', 10) || 1, 1);
+    const url = new URL('https://api-v3.raydium.io/pools/info/list');
+    url.searchParams.set('poolType', req.query.poolType || 'all');
+    url.searchParams.set('poolSortField', req.query.poolSortField || 'default');
+    url.searchParams.set('sortType', req.query.sortType || 'desc');
+    url.searchParams.set('pageSize', String(pageSize));
+    url.searchParams.set('page', String(page));
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(url.toString(), { signal: controller.signal });
+      const payload = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({ success: false, error: payload?.msg || `Raydium HTTP ${response.status}` });
+      }
+      return res.json({ success: true, data: payload.data || payload, source: 'raydium-api-v3', timestamp: Date.now() });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.error('[Raydium] Error consultando API:', error.message);
+    return res.status(502).json({ success: false, error: error.name === 'AbortError' ? 'Raydium timeout' : error.message });
+  }
+});
+
+app.get('/api/raydium/pool/:id', async (req, res) => {
+  try {
+    const url = new URL('https://api-v3.raydium.io/pools/info/ids');
+    url.searchParams.set('ids', req.params.id);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(url.toString(), { signal: controller.signal });
+      const payload = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({ success: false, error: payload?.msg || `Raydium HTTP ${response.status}` });
+      }
+      return res.json({ success: true, data: payload.data || payload, source: 'raydium-api-v3', timestamp: Date.now() });
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (error) {
+    console.error('[Raydium] Error consultando pool:', error.message);
+    return res.status(502).json({ success: false, error: error.name === 'AbortError' ? 'Raydium timeout' : error.message });
+  }
 });
 
 // ============================================
@@ -297,8 +347,8 @@ async function initializeServices() {
     
     // Registrar listener para nuevos tokens
     pumpFunDetector.onNewToken((event) => {
+      rememberPumpFunToken(event);
       console.log(`[Event] Nuevo token: ${event.symbol} (${event.mint})`);
-      // Aquí se conectaría la lógica de negocio
     });
   } catch (error) {
     console.error('[Init] ❌ Error iniciando detector:', error.message);

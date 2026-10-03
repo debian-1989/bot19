@@ -1,7 +1,6 @@
 export interface BotConfig {
   rpcEndpoint: string;
   walletAddress: string;
-  privateKey: string;
   tradeAmount: number;
   maxConcurrentTrades: number;
   takeProfitMultiplier: number;

@@ -80,7 +80,7 @@ export default function ConnectionStatus() {
           isConnected: pumpStatus.isConnected,
           consecutiveErrors: pumpStatus.consecutiveErrors,
           lastError: pumpStatus.lastError,
-          mode: pumpStatus.tokenCount > 0 ? 'real' : 'disconnected',
+          mode: pumpStatus.isConnected ? 'real' : 'disconnected',
         },
         raydium: {
           ...prev.raydium,
@@ -91,7 +91,7 @@ export default function ConnectionStatus() {
           isConnected: rayStatus.isConnected,
           consecutiveErrors: rayStatus.consecutiveErrors,
           lastError: rayStatus.lastError,
-          mode: rayStatus.tokenCount > 0 ? 'real' : 'disconnected',
+          mode: rayStatus.isConnected ? 'real' : 'disconnected',
         },
       }));
     }, 1000);
@@ -104,24 +104,15 @@ export default function ConnectionStatus() {
     try {
       const start = Date.now();
       
-      // Usar un método RPC que siempre funcione
-      const response = await fetch(status.solana.rpcEndpoint, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'getVersion',
-        }),
-      });
+      const response = await fetch('http://localhost:3001/api/health/detailed');
       
       const latency = Date.now() - start;
       
       if (response.ok) {
         const data = await response.json();
-        console.log('[Solana RPC] Connected:', data);
+        const rpcHealthy = Boolean(data.solana?.httpConnected);
+        if (!rpcHealthy) throw new Error('El backend no tiene el RPC HTTP saludable');
+        console.log('[Solana RPC] Connected:', data.solana);
         
         setStatus(prev => ({
           ...prev,
@@ -151,13 +142,14 @@ export default function ConnectionStatus() {
   // Probar conexión a pump.fun
   const testPumpFunConnection = async () => {
     try {
-      const tokens = await pumpFunRealService.fetchLatestTokens(10);
+      await pumpFunRealService.fetchLatestTokens(10);
+      const pumpStatus = pumpFunRealService.getStatus();
       setStatus(prev => ({
         ...prev,
         pumpfun: {
           ...prev.pumpfun,
-          connected: tokens.length > 0,
-          mode: 'real',
+          connected: pumpStatus.isConnected,
+          mode: pumpStatus.isConnected ? 'real' : 'disconnected',
           error: undefined,
         },
       }));
@@ -177,13 +169,14 @@ export default function ConnectionStatus() {
   // Probar conexión a Raydium
   const testRaydiumConnection = async () => {
     try {
-      const pools = await raydiumService.fetchNewPools(10);
+      await raydiumService.fetchNewPools(10);
+      const rayStatus = raydiumService.getStatus();
       setStatus(prev => ({
         ...prev,
         raydium: {
           ...prev.raydium,
-          connected: pools.length > 0,
-          mode: 'real',
+          connected: rayStatus.isConnected,
+          mode: rayStatus.isConnected ? 'real' : 'disconnected',
           error: undefined,
         },
       }));

@@ -66,7 +66,10 @@ class SolanaConnectionManager {
       try {
         this.fallbackHttpConnection = new Connection(
           this.config.solanaRpcFallback,
-          { commitment: this.config.commitmentConfirm }
+          {
+            commitment: this.config.commitmentConfirm,
+            wsEndpoint: this.config.solanaWsFallback
+          }
         );
         console.log('[Solana] ✅ Conexión HTTP de respaldo creada');
       } catch (error) {
@@ -142,7 +145,9 @@ class SolanaConnectionManager {
     this.httpConnection = this.fallbackHttpConnection;
     this.fallbackHttpConnection = temp;
     
-    this.status.usingFallback = !this.status.usingFallback;
+    this.status.usingFallback = true;
+    this.status.httpConnected = true;
+    this.status.lastHealthCheck = Date.now();
     console.log('[Solana] ✅ Cambiado a RPC de respaldo');
   }
 
@@ -218,6 +223,13 @@ class SolanaConnectionManager {
     return await connection.getLatestBlockhash();
   }
 
+  setWebSocketStatus(connected) {
+    this.status.wsConnected = Boolean(connected);
+    if (connected) {
+      this.status.lastEventAt = Date.now();
+    }
+  }
+
   async getSlot() {
     const connection = this.getConnection();
     return await connection.getSlot();
@@ -255,6 +267,8 @@ class SolanaConnectionManager {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
     }
+
+    this.status.wsConnected = false;
     
     console.log('[Solana] ✅ Conexiones cerradas');
   }

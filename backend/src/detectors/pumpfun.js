@@ -57,6 +57,7 @@ class PumpFunDetector {
       );
       
       this.isListening = true;
+      this.connectionManager.setWebSocketStatus(true);
       console.log('[PumpFun] ✅ Suscrito a logs del programa Pump.fun');
       console.log(`[PumpFun] Subscription ID: ${this.subscriptionId}`);
       
@@ -77,6 +78,8 @@ class PumpFunDetector {
       // Actualizar métricas
       this.metrics.lastSlot = slot;
       this.metrics.lastEventAt = Date.now();
+      this.lastProcessedSlot = slot;
+      this.connectionManager.status.lastEventAt = this.metrics.lastEventAt;
       
       // Ignorar transacciones fallidas
       if (err) {
@@ -128,56 +131,40 @@ class PumpFunDetector {
   }
 
   async parseTokenCreation(logMessages, signature, slot) {
-    // Buscar patrones de creación de token en los logs
-    // Esto es un parser básico - en producción necesitarías el IDL completo
-    
     try {
-      // Buscar instrucciones de creación
-      const createInstructions = logMessages.filter(log => 
-        log.includes('Create') || 
-        log.includes('Initialize') ||
-        log.includes('create_v2')
+      // Solo aceptar instrucciones explícitas de creación de Pump.fun.
+      // Initialize/Create de otros programas produce falsos positivos.
+      const hasPumpCreateInstruction = logMessages.some((log) =>
+        /Program log:\s+Instruction:\s+(Create|create_v2)\b/.test(log) ||
+        /Instruction:\s+(Create|create_v2)\b/.test(log)
       );
-      
-      if (createInstructions.length === 0) {
+
+      if (!hasPumpCreateInstruction) {
         return null;
       }
-      
-      // Extraer información del log
-      // Nota: Este es un parser simplificado. En producción necesitarías:
-      // 1. El IDL completo del programa Pump.fun
-      // 2. Parsing binario de los datos de la instrucción
-      // 3. Extracción de cuentas involucradas
-      
-      // Por ahora, extraemos información básica de los logs
-      let mint = null;
-      let creator = null;
-      let name = null;
-      let symbol = null;
-      
-      // Buscar addresses en los logs (formato base58)
-      const addressPattern = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
-      const addresses = logMessages.join(' ').match(addressPattern) || [];
-      
-      if (addresses.length > 0) {
-        mint = addresses[0]; // Primer address suele ser el mint
-      }
-      
-      if (addresses.length > 1) {
-        creator = addresses[1]; // Segundo address suele ser el creador
-      }
-      
-      // Buscar nombre y símbolo en los logs (si están presentes)
-      const nameMatch = logMessages.join(' ').match(/name[:\s]+([^\s,]+)/i);
-      const symbolMatch = logMessages.join(' ').match(/symbol[:\s]+([^\s,]+)/i);
-      
-      if (nameMatch) name = nameMatch[1];
-      if (symbolMatch) symbol = symbolMatch[1];
-      
+
+      // El mint no se obtiene de la primera cadena base58 de los logs.
+      // Se consulta la transacción y se validan únicamente mints SPL.
+      const connection = this.connectionManager.getConnection();
+      const transaction = await connection.getParsedTransaction(signature, {
+        commitment: this.config.commitmentConfirm,
+        maxSupportedTransactionVersion: 0
+      });
+      const postTokenBalances = transaction?.meta?.postTokenBalances || [];
+      const candidateMints = [...new Set(postTokenBalances.map((balance) => balance.mint).filter(Boolean))];
+      const mint = await this.findValidMint(candidateMints);
+
       if (!mint) {
         return null;
       }
-      
+
+      const accountKeys = transaction?.transaction?.message?.accountKeys || [];
+      const creatorKey = accountKeys.find((key) => key.signer);
+      const creator = creatorKey?.pubkey?.toString() || null;
+      const logText = logMessages.join(' ');
+      const nameMatch = logText.match(/name[:\s]+([^\s,]+)/i);
+      const symbolMatch = logText.match(/symbol[:\s]+([^\s,]+)/i);
+
       // Crear evento normalizado
       return {
         id: `${signature}-${mint}`,
@@ -187,11 +174,11 @@ class PumpFunDetector {
         signature: signature,
         slot: slot,
         createdAt: Date.now(),
-        name: name || `Token_${mint.substring(0, 8)}`,
-        symbol: symbol || mint.substring(0, 6).toUpperCase(),
+        name: nameMatch ? nameMatch[1] : `Token_${mint.substring(0, 8)}`,
+        symbol: symbolMatch ? symbolMatch[1] : mint.substring(0, 6).toUpperCase(),
         raw: {
           logs: logMessages,
-          addresses: addresses
+          candidateMints
         }
       };
       
@@ -199,6 +186,34 @@ class PumpFunDetector {
       console.error('[PumpFun] Error parseando token creation:', error.message);
       return null;
     }
+  }
+
+  async findValidMint(candidateMints) {
+    const excludedMints = new Set([
+      'So11111111111111111111111111111111111111112',
+      '11111111111111111111111111111111'
+    ]);
+    const tokenProgramOwners = new Set([
+      'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+      'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+    ]);
+
+    for (const mint of candidateMints) {
+      if (excludedMints.has(mint)) continue;
+      try {
+        const info = await this.connectionManager.getConnection().getParsedAccountInfo(
+          new PublicKey(mint),
+          this.config.commitmentConfirm
+        );
+        if (info.value && tokenProgramOwners.has(info.value.owner.toString())) {
+          return mint;
+        }
+      } catch (error) {
+        console.warn(`[PumpFun] No se pudo validar mint ${mint}: ${error.message}`);
+      }
+    }
+
+    return null;
   }
 
   onNewToken(callback) {
@@ -234,6 +249,7 @@ class PumpFunDetector {
     }
     
     this.isListening = false;
+    this.connectionManager.setWebSocketStatus(false);
     this.subscriptionId = null;
   }
 

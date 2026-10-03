@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { BotConfig } from '../types';
 
 interface WalletPanelProps {
@@ -8,8 +8,6 @@ interface WalletPanelProps {
 }
 
 export default function WalletPanel({ solBalance, config, setConfig }: WalletPanelProps) {
-  const [showKey, setShowKey] = useState(false);
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -45,30 +43,10 @@ export default function WalletPanel({ solBalance, config, setConfig }: WalletPan
             />
           </div>
 
-          <div>
-            <label className="block text-xs text-gray-400 mb-1.5">Clave Privada</label>
-            <div className="relative">
-              <input
-                type={showKey ? 'text' : 'password'}
-                value={config.privateKey}
-                onChange={e => setConfig({ ...config, privateKey: e.target.value })}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 pr-12 text-sm text-white font-mono focus:border-green-500 focus:outline-none"
-                placeholder="Ingresa la clave privada"
-              />
-              <button
-                onClick={() => setShowKey(!showKey)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-              >
-                {showKey ? '🙈' : '👁️'}
-              </button>
-            </div>
-            <p className="text-xs text-red-400/70 mt-1">⚠️ Nunca compartas tu clave privada. Se almacena solo localmente.</p>
-          </div>
-
           <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
             <p className="text-xs text-red-400">
-              ⚠️ <strong>Advertencia de Seguridad:</strong> Tu clave privada se almacena localmente en tu navegador. 
-              Nunca la compartas. Considera usar una billetera dedicada para el trading del bot con fondos limitados.
+              ⚠️ <strong>Seguridad:</strong> La clave privada nunca se solicita ni se almacena en el navegador.
+              La firma debe realizarse exclusivamente en el backend con una wallet dedicada y fondos limitados.
             </p>
           </div>
         </div>

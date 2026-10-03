@@ -14,7 +14,6 @@ import { raydiumService, RaydiumToken } from './services/raydium';
 const defaultConfig: BotConfig = {
   rpcEndpoint: 'https://api.mainnet-beta.solana.com',
   walletAddress: '',
-  privateKey: '',
   tradeAmount: 0.1,
   maxConcurrentTrades: 10,
   takeProfitMultiplier: 2,
@@ -50,7 +49,10 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [config, setConfig] = useState<BotConfig>(() => {
     const saved = localStorage.getItem('botConfig');
-    return saved ? { ...defaultConfig, ...JSON.parse(saved) } : defaultConfig;
+    if (!saved) return defaultConfig;
+    const parsed = JSON.parse(saved);
+    if ('privateKey' in parsed) delete parsed.privateKey;
+    return { ...defaultConfig, ...parsed };
   });
   const [isRunning, setIsRunning] = useState(false);
   const [detectedTxns, setDetectedTxns] = useState<DetectedTransaction[]>([]);
