@@ -152,85 +152,59 @@ function App() {
         return;
       }
 
-      // Las respuestas vienen ordenadas por reciente/actividad. Procesamos cada
-      // mint real una sola vez para no simular compras repetidas del mismo token.
-      const candidate = candidates[0];
-      const token = candidate.token;
-      const platform = candidate.platform;
-      const realPrice = candidate.price;
-      const tokenKey = `${platform}:${token.mint}`;
-      processedTokenKeysRef.current.add(tokenKey);
-      const buyAmount = Number(currentConfig.tradeAmount.toFixed(3));
-      
-      const newTx: DetectedTransaction = {
-        id: generateId(),
-        timestamp: new Date(),
-        buyerAddress: randomAddress(),
-        tokenAddress: token.mint,
-        tokenName: token.name,
-        tokenSymbol: token.symbol,
-        buyAmount,
-        estimatedPrice: realPrice,
-        status: 'detected',
-        platform: platform,
-      };
-
-      setDetectedTxns(prev => [newTx, ...prev].slice(0, 100)); // Aumentar de 50 a 100
-      const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
-      addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
-
-      const openTradesCount = currentTrades.filter((t: Trade) => t.status === 'open').length;
-      const capitalInUse = currentTrades.filter((t: Trade) => t.status === 'open').reduce((sum: number, t: Trade) => sum + t.buyAmount, 0);
-      const availableCapital = currentBalance - capitalInUse;
-      
+      // Procesar un lote completo. El capital local se actualiza en cada entrada
+      // para que varias órdenes del mismo ciclo no sobrepasen el saldo real.
+      let localOpenTrades = currentTrades.filter((t: Trade) => t.status === 'open').length;
+      let localAvailableCapital = currentBalance;
       const minEntry = currentConfig.tradeAmount * 0.1;
-      
-      const canEnter = currentConfig.autoSnipe && 
-                       availableCapital >= minEntry &&
-                       openTradesCount < currentConfig.maxConcurrentTrades;
 
-      if (canEnter) {
-        let snipeAmount: number;
-        
-        if (availableCapital >= currentConfig.tradeAmount) {
-          snipeAmount = currentConfig.tradeAmount;
-        } else {
-          snipeAmount = availableCapital * 0.95;
+      for (const candidate of candidates) {
+        if (!currentConfig.autoSnipe) break;
+        if (localOpenTrades >= currentConfig.maxConcurrentTrades || localAvailableCapital < minEntry) break;
+
+        const token = candidate.token;
+        const platform = candidate.platform;
+        const realPrice = candidate.price;
+        const tokenKey = `${platform}:${token.mint}`;
+        if (realPrice <= 0) {
+          processedTokenKeysRef.current.add(tokenKey);
+          continue;
         }
-        
-        if (snipeAmount < minEntry) {
-          addLog(`⚠️ Capital insuficiente para $${token.symbol}`);
-          return;
-        }
-        
-        // Simular deslizamiento adverso dentro/fuera del límite configurado.
-        // Si el movimiento excede el máximo tolerado, la orden paper no entra.
-        const simulatedSlippage = Math.random() * Math.max(currentConfig.slippage * 2, 0.1);
-        if (simulatedSlippage > currentConfig.slippage) {
-          setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? {
-            ...tx,
-            status: 'missed' as const,
-          } : tx));
-          addLog(`⚠️ Entrada omitida: $${token.symbol} | slippage ${simulatedSlippage.toFixed(2)}% > límite ${currentConfig.slippage.toFixed(2)}%`);
-          return;
-        }
-        const ourBuyPrice = realPrice * (1 + simulatedSlippage / 100);
-        
-        addLog(`⚡ SNIPE: ${snipeAmount.toFixed(3)} SOL en $${token.symbol}`);
-        
-        const newTrade: Trade = {
-          id: generateId(),
-          timestamp: new Date(),
-          tokenAddress: token.mint,
-          tokenName: token.name,
-          tokenSymbol: token.symbol,
-          buyAmount: snipeAmount,
-          buyPrice: ourBuyPrice,
-          status: 'open',
+
+        const buyAmount = Number(currentConfig.tradeAmount.toFixed(3));
+        const newTx: DetectedTransaction = {
+          id: generateId(), timestamp: new Date(), buyerAddress: randomAddress(),
+          tokenAddress: token.mint, tokenName: token.name, tokenSymbol: token.symbol,
+          buyAmount, estimatedPrice: realPrice, status: 'detected', platform,
         };
-        
+        setDetectedTxns(prev => [newTx, ...prev].slice(0, 100));
+        const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
+        addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
+
+        const snipeAmount = Math.min(currentConfig.tradeAmount, localAvailableCapital * 0.95);
+        if (snipeAmount < minEntry) break;
+
+        // En Demo el slippage se mantiene dentro del límite configurado. Antes
+        // se simulaba hasta el doble y se rechazaba artificialmente ~la mitad.
+        const simulatedSlippage = currentConfig.slippage > 0
+          ? Math.random() * currentConfig.slippage
+          : 0;
+        const ourBuyPrice = realPrice * (1 + simulatedSlippage / 100);
+        processedTokenKeysRef.current.add(tokenKey);
+        localAvailableCapital -= snipeAmount;
+        localOpenTrades += 1;
+
+        addLog(`⚡ SNIPE: ${snipeAmount.toFixed(3)} SOL en $${token.symbol} | slippage ${simulatedSlippage.toFixed(2)}%`);
+        const newTrade: Trade = {
+          id: generateId(), timestamp: new Date(), tokenAddress: token.mint,
+          tokenName: token.name, tokenSymbol: token.symbol, buyAmount: snipeAmount,
+          buyPrice: ourBuyPrice, status: 'open',
+        };
+
         setTrades(prev => [newTrade, ...prev]);
         setSolBalance(prev => prev - snipeAmount);
+        tradesRef.current = [newTrade, ...tradesRef.current];
+        solBalanceRef.current = localAvailableCapital;
         setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { ...tx, status: 'sniped' as const, ourBuyPrice } : tx));
         
         // Simular movimiento de precio y venta automática
@@ -279,6 +253,8 @@ function App() {
           newTrade.txHash = randomAddress();
           
           setSolBalance(prev => prev + newTrade.sellAmount!);
+          solBalanceRef.current += newTrade.sellAmount!;
+          tradesRef.current = tradesRef.current.map(t => t.id === newTrade.id ? { ...newTrade } : t);
           setTrades(prev => prev.map(t => t.id === newTrade.id ? { ...newTrade } : t));
           setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { 
             ...tx, 
@@ -291,12 +267,12 @@ function App() {
           const emoji = profitSOL >= 0 ? '💰' : '🛑';
           addLog(`${emoji} ${exitReason}: $${token.symbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} SOL (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)`);
         }, Math.random() * 5000 + 1000);
-      } else {
-        if (openTradesCount >= currentConfig.maxConcurrentTrades) {
-          addLog(`⏳ Máx posiciones (${openTradesCount}/${currentConfig.maxConcurrentTrades})`);
-        } else if (availableCapital < minEntry) {
-          addLog(`⏳ Capital bajo: ${availableCapital.toFixed(4)} SOL`);
-        }
+      }
+
+      if (localOpenTrades >= currentConfig.maxConcurrentTrades) {
+        addLog(`⏳ Máx posiciones (${localOpenTrades}/${currentConfig.maxConcurrentTrades}); candidatos restantes quedan en cola`);
+      } else if (localAvailableCapital < minEntry) {
+        addLog(`⏳ Capital bajo: ${localAvailableCapital.toFixed(4)} SOL; candidatos restantes quedan en cola`);
       }
     }, Math.random() * 150 + 50); // 0.05-0.2 segundos (antes 0.2-0.8s)
 
@@ -335,6 +311,8 @@ function App() {
           };
           
           setSolBalance(prev => prev + closedTrade.sellAmount!);
+          solBalanceRef.current += closedTrade.sellAmount!;
+          tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);
           setTrades(prev => prev.map(t => t.id === trade.id ? closedTrade : t));
           
           const emoji = profitSOL >= 0 ? '💰' : '🛑';

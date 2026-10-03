@@ -45,6 +45,7 @@ class PumpFunService {
   private consecutiveErrors = 0;
   private lastError: string | null = null;
   private isConnected = false;
+  private fetchInProgress = false;
 
   constructor() {}
 
@@ -196,6 +197,18 @@ class PumpFunService {
   }
 
   // Iniciar polling automático
+  private async fetchIfIdle() {
+    if (this.fetchInProgress) return;
+    this.fetchInProgress = true;
+    try {
+      await this.fetchLatestTokens(500);
+    } catch (error) {
+      console.error('[PumpFun] Polling cycle failed:', error);
+    } finally {
+      this.fetchInProgress = false;
+    }
+  }
+
   startPolling(intervalMs: number = 1000) {
     console.log('[PumpFun] Starting polling...', { intervalMs, isPolling: this.isPolling });
     
@@ -210,12 +223,12 @@ class PumpFunService {
     console.log('[PumpFun] Polling started, fetching immediately');
     
     // Fetch inmediato
-    this.fetchLatestTokens();
+    void this.fetchIfIdle();
     
     // Configurar polling
     this.pollIntervalId = setInterval(() => {
       console.log('[PumpFun] Polling interval triggered');
-      this.fetchLatestTokens();
+      void this.fetchIfIdle();
     }, intervalMs);
     
     console.log('[PumpFun] Polling interval set:', intervalMs, 'ms');

@@ -98,7 +98,7 @@ async function fetchRecentPumpFunTokens(limit) {
 
   const url = new URL('https://frontend-api-v3.pump.fun/coins');
   url.searchParams.set('offset', '0');
-  url.searchParams.set('limit', String(Math.min(limit, 200)));
+  url.searchParams.set('limit', String(Math.min(limit, 500)));
   url.searchParams.set('sort', 'created_timestamp');
   url.searchParams.set('order', 'DESC');
   url.searchParams.set('includeNsfw', 'false');

@@ -56,6 +56,7 @@ class RaydiumService {
   private consecutiveErrors = 0;
   private lastError: string | null = null;
   private isConnected = false;
+  private fetchInProgress = false;
 
   constructor() {}
 
@@ -229,6 +230,18 @@ class RaydiumService {
   }
 
   // Iniciar polling automático
+  private async fetchIfIdle() {
+    if (this.fetchInProgress) return;
+    this.fetchInProgress = true;
+    try {
+      await this.fetchNewPools(100);
+    } catch (error) {
+      console.error('[Raydium] Polling cycle failed:', error);
+    } finally {
+      this.fetchInProgress = false;
+    }
+  }
+
   startPolling(intervalMs: number = 5000) {
     console.log('[Raydium] Starting polling...', { intervalMs, isPolling: this.isPolling });
     
@@ -242,11 +255,11 @@ class RaydiumService {
     
     console.log('[Raydium] Polling started, fetching immediately');
     
-    this.fetchNewPools();
+    void this.fetchIfIdle();
     
     this.pollIntervalId = setInterval(() => {
       console.log('[Raydium] Polling interval triggered');
-      this.fetchNewPools();
+      void this.fetchIfIdle();
     }, intervalMs);
     
     console.log('[Raydium] Polling interval set:', intervalMs, 'ms');
