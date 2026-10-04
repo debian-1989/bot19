@@ -46,6 +46,27 @@ const randomAddress = () => {
   return result;
 };
 
+const PAPER_COMPUTE_UNITS = 200_000;
+
+const estimatePaperFee = (config: BotConfig) =>
+  0.000005 + (config.priorityFee * PAPER_COMPUTE_UNITS) / 1_000_000_000_000_000;
+
+const estimatePriceImpact = (candidate: {
+  platform: 'pump.fun' | 'raydium';
+  token: PumpFunToken | RaydiumToken;
+}, solAmount: number) => {
+  if (candidate.platform === 'pump.fun') {
+    const token = candidate.token as PumpFunToken;
+    const reserveSol = token.virtual_sol_reserves > 1_000_000
+      ? token.virtual_sol_reserves / 1_000_000_000
+      : token.virtual_sol_reserves;
+    return Math.min(0.5, solAmount / Math.max(reserveSol, solAmount * 2));
+  }
+
+  const token = candidate.token as RaydiumToken;
+  return Math.min(0.5, solAmount / Math.max(token.liquidity || 0, solAmount * 2));
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [config, setConfig] = useState<BotConfig>(() => {
@@ -181,24 +202,30 @@ function App() {
         const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
         addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
 
-        const snipeAmount = Math.min(currentConfig.tradeAmount, localAvailableCapital * 0.95);
+        const entryFee = estimatePaperFee(currentConfig);
+        const snipeAmount = Math.min(
+          currentConfig.tradeAmount,
+          Math.max(0, (localAvailableCapital - entryFee) * 0.95)
+        );
         if (snipeAmount < minEntry) break;
 
-        // En Demo el slippage se mantiene dentro del límite configurado. Antes
-        // se simulaba hasta el doble y se rechazaba artificialmente ~la mitad.
+        // Estimar una ejecución realista: impacto de liquidez + una fracción
+        // conservadora del slippage permitido, sin inventar un precio aleatorio.
+        const impact = estimatePriceImpact(candidate, snipeAmount);
         const simulatedSlippage = currentConfig.slippage > 0
-          ? Math.random() * currentConfig.slippage
+          ? Math.min(currentConfig.slippage / 100, Math.max(0.0005, impact * 0.5))
           : 0;
-        const ourBuyPrice = realPrice * (1 + simulatedSlippage / 100);
+        const ourBuyPrice = realPrice * (1 + impact + simulatedSlippage);
+        const tokenAmount = snipeAmount / ourBuyPrice;
         processedTokenKeysRef.current.add(tokenKey);
-        localAvailableCapital -= snipeAmount;
+        localAvailableCapital -= snipeAmount + entryFee;
         localOpenTrades += 1;
 
-        addLog(`⚡ SNIPE: ${snipeAmount.toFixed(3)} SOL en $${token.symbol} | slippage ${simulatedSlippage.toFixed(2)}%`);
+        addLog(`⚡ PAPER BUY: ${snipeAmount.toFixed(3)} SOL en $${token.symbol} | impacto ${(impact * 100).toFixed(2)}% | fee ${entryFee.toFixed(6)} SOL`);
         const newTrade: Trade = {
           id: generateId(), timestamp: new Date(), tokenAddress: token.mint,
-          tokenName: token.name, tokenSymbol: token.symbol, buyAmount: snipeAmount,
-          buyPrice: ourBuyPrice, status: 'open',
+          tokenName: token.name, tokenSymbol: token.symbol, platform, buyAmount: snipeAmount,
+          buyPrice: ourBuyPrice, tokenAmount, lastMarketPrice: realPrice, entryFee, status: 'open',
         };
 
         setTrades(prev => [newTrade, ...prev]);
@@ -206,67 +233,6 @@ function App() {
         tradesRef.current = [newTrade, ...tradesRef.current];
         solBalanceRef.current = localAvailableCapital;
         setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { ...tx, status: 'sniped' as const, ourBuyPrice } : tx));
-        
-        // Simular movimiento de precio y venta automática
-        setTimeout(() => {
-          const rand = Math.random();
-          let priceMultiplier: number;
-          
-          if (rand < 0.3) {
-            priceMultiplier = 1.5 + Math.random() * 2.5;
-          } else if (rand < 0.5) {
-            priceMultiplier = 1.1 + Math.random() * 0.4;
-          } else if (rand < 0.7) {
-            priceMultiplier = 0.9 + Math.random() * 0.2;
-          } else if (rand < 0.9) {
-            priceMultiplier = 0.5 + Math.random() * 0.4;
-          } else {
-            priceMultiplier = 0.1 + Math.random() * 0.4;
-          }
-          
-          const sellPrice = ourBuyPrice * priceMultiplier;
-          const profitPercent = (priceMultiplier - 1) * 100;
-          const profitSOL = snipeAmount * (priceMultiplier - 1);
-          
-          let exitReason = '';
-          
-          if (priceMultiplier >= currentConfig.takeProfitMultiplier) {
-            exitReason = `TOMA DE GANANCIA a ${priceMultiplier.toFixed(2)}x`;
-          } else if (profitPercent <= -currentConfig.stopLossPercent) {
-            exitReason = `STOP LOSS a ${profitPercent.toFixed(1)}%`;
-          } else if (Math.abs(profitSOL) >= currentConfig.maxLossPerTrade) {
-            exitReason = `PÉRDIDA MÁXIMA: ${profitSOL.toFixed(4)} SOL`;
-          } else if (profitPercent >= currentConfig.trailingStopActivation) {
-            exitReason = `TRAILING STOP a +${profitPercent.toFixed(1)}%`;
-          } else if (profitPercent > 0) {
-            const profitTimeMinutes = Math.floor(currentConfig.profitTimeExit / 60);
-            exitReason = `SALIDA POR GANANCIA tras ${profitTimeMinutes}m (+${profitPercent.toFixed(1)}%)`;
-          } else {
-            exitReason = profitPercent >= 0 ? `SALIDA CON GANANCIA +${profitPercent.toFixed(1)}%` : `SALIDA CON PÉRDIDA ${profitPercent.toFixed(1)}%`;
-          }
-          
-          newTrade.sellPrice = sellPrice;
-          newTrade.sellAmount = snipeAmount * priceMultiplier;
-          newTrade.profit = profitSOL;
-          newTrade.profitPercent = profitPercent;
-          newTrade.status = 'closed';
-          newTrade.txHash = randomAddress();
-          
-          setSolBalance(prev => prev + newTrade.sellAmount!);
-          solBalanceRef.current += newTrade.sellAmount!;
-          tradesRef.current = tradesRef.current.map(t => t.id === newTrade.id ? { ...newTrade } : t);
-          setTrades(prev => prev.map(t => t.id === newTrade.id ? { ...newTrade } : t));
-          setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { 
-            ...tx, 
-            status: profitSOL >= 0 ? 'sold' as const : 'failed' as const,
-            ourSellPrice: sellPrice, 
-            profit: profitSOL, 
-            profitPercent 
-          } : tx));
-          
-          const emoji = profitSOL >= 0 ? '💰' : '🛑';
-          addLog(`${emoji} ${exitReason}: $${token.symbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} SOL (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)`);
-        }, Math.random() * 5000 + 1000);
       }
 
       if (localOpenTrades >= currentConfig.maxConcurrentTrades) {
@@ -286,6 +252,8 @@ function App() {
     const monitorInterval = setInterval(() => {
       const currentConfig = configRef.current;
       const currentTrades = tradesRef.current;
+      const currentPumpTokens = tokensRef.current;
+      const currentRaydiumTokens = raydiumTokensRef.current;
       const now = Date.now();
       
       currentTrades.forEach(trade => {
@@ -293,31 +261,77 @@ function App() {
         
         const tradeAge = now - trade.timestamp.getTime();
         const maxAge = currentConfig.timeBasedExit * 1000;
-        
-        if (tradeAge >= maxAge) {
-          const exitMultiplier = 0.8 + Math.random() * 0.7;
-          const sellPrice = trade.buyPrice * exitMultiplier;
-          const profitPercent = (exitMultiplier - 1) * 100;
-          const profitSOL = trade.buyAmount * (exitMultiplier - 1);
-          
-          const closedTrade: Trade = {
-            ...trade,
-            sellPrice,
-            sellAmount: trade.buyAmount * exitMultiplier,
-            profit: profitSOL,
-            profitPercent,
-            status: 'closed',
-            txHash: randomAddress(),
-          };
-          
-          setSolBalance(prev => prev + closedTrade.sellAmount!);
-          solBalanceRef.current += closedTrade.sellAmount!;
-          tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);
-          setTrades(prev => prev.map(t => t.id === trade.id ? closedTrade : t));
-          
-          const emoji = profitSOL >= 0 ? '💰' : '🛑';
-          addLog(`${emoji} CIERRE FORZADO POR TIEMPO: $${trade.tokenSymbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} SOL (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)`);
+
+        const liveCandidate = trade.platform === 'pump.fun'
+          ? currentPumpTokens.find(token => token.mint === trade.tokenAddress)
+          : currentRaydiumTokens.find(token => token.mint === trade.tokenAddress);
+        const marketPrice = liveCandidate
+          ? trade.platform === 'pump.fun'
+            ? pumpFunRealService.calculateTokenPrice(liveCandidate as PumpFunToken)
+            : Number((liveCandidate as RaydiumToken).price || 0)
+          : trade.lastMarketPrice;
+
+        // Si el feed dejó de mostrar el token, conservamos el último precio
+        // conocido y esperamos al cierre temporal en vez de inventar una cotización.
+        if (!marketPrice || marketPrice <= 0) {
+          if (tradeAge < maxAge) return;
+        } else {
+          trade.lastMarketPrice = marketPrice;
         }
+
+        const effectiveMarketPrice = marketPrice || trade.lastMarketPrice || trade.buyPrice;
+        const exitCandidate = liveCandidate
+          ? { platform: trade.platform || 'raydium' as const, token: liveCandidate }
+          : null;
+        const exitImpact = exitCandidate ? estimatePriceImpact(exitCandidate, trade.buyAmount) : 0;
+        const exitSlippage = currentConfig.slippage > 0
+          ? Math.min(currentConfig.slippage / 100, Math.max(0.0005, exitImpact * 0.5))
+          : 0;
+        const sellPrice = effectiveMarketPrice * Math.max(0, 1 - exitImpact - exitSlippage);
+        const tokenAmount = trade.tokenAmount || trade.buyAmount / Math.max(trade.buyPrice, Number.EPSILON);
+        const sellAmount = tokenAmount * sellPrice;
+        const exitFee = estimatePaperFee(currentConfig);
+        const profitSOL = sellAmount - exitFee - trade.buyAmount - (trade.entryFee || 0);
+        const investedSOL = trade.buyAmount + (trade.entryFee || 0);
+        const profitPercent = investedSOL > 0 ? (profitSOL / investedSOL) * 100 : 0;
+        const priceMultiplier = sellPrice / Math.max(trade.buyPrice, Number.EPSILON);
+        const timeExit = tradeAge >= maxAge;
+
+        let exitReason = '';
+        if (priceMultiplier >= currentConfig.takeProfitMultiplier) {
+          exitReason = `TOMA DE GANANCIA a ${priceMultiplier.toFixed(2)}x`;
+        } else if (profitPercent <= -currentConfig.stopLossPercent) {
+          exitReason = `STOP LOSS a ${profitPercent.toFixed(1)}%`;
+        } else if (Math.abs(profitSOL) >= currentConfig.maxLossPerTrade && profitSOL < 0) {
+          exitReason = `PÉRDIDA MÁXIMA: ${profitSOL.toFixed(4)} SOL`;
+        } else if (timeExit) {
+          exitReason = `SALIDA POR TIEMPO a precio vivo`;
+        } else if (profitPercent >= currentConfig.trailingStopActivation) {
+          exitReason = `TRAILING STOP a +${profitPercent.toFixed(1)}%`;
+        } else if (tradeAge >= currentConfig.profitTimeExit * 1000 && profitSOL > 0) {
+          exitReason = `SALIDA POR GANANCIA tras ${Math.floor(tradeAge / 60000)}m`;
+        } else {
+          return;
+        }
+
+        const closedTrade: Trade = {
+          ...trade,
+          sellPrice,
+          sellAmount,
+          exitFee,
+          profit: profitSOL,
+          profitPercent,
+          status: 'closed',
+          txHash: `PAPER-${generateId()}`,
+        };
+
+        setSolBalance(prev => prev + sellAmount - exitFee);
+        solBalanceRef.current += sellAmount - exitFee;
+        tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);
+        setTrades(prev => prev.map(t => t.id === trade.id ? closedTrade : t));
+
+        const emoji = profitSOL >= 0 ? '💰' : '🛑';
+        addLog(`${emoji} ${exitReason}: $${trade.tokenSymbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} SOL (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%) | precio vivo`);
       });
     }, 1000);
 
@@ -364,7 +378,8 @@ function App() {
       raydiumService.startPolling(5000);
       addLog('✅ Conectado a Raydium - Obteniendo tokens');
       addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
-      addLog('⚡ Detección ultra-rápida: 0.05-0.2 segundos');
+      addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');
+      addLog(`⚡ Detección ultra-rápida | fee estimada por lado: ${estimatePaperFee(configRef.current).toFixed(6)} SOL`);
     } else {
       addLog('🔴 Bot DETENIDO');
       addLog('🔌 Desconectando de pump.fun...');

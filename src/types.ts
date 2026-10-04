@@ -45,10 +45,15 @@ export interface Trade {
   tokenAddress: string;
   tokenName: string;
   tokenSymbol: string;
+  platform?: 'pump.fun' | 'raydium';
   buyAmount: number;
   buyPrice: number;
+  tokenAmount?: number;
+  lastMarketPrice?: number;
+  entryFee?: number;
   sellAmount?: number;
   sellPrice?: number;
+  exitFee?: number;
   profit?: number;
   profitPercent?: number;
   status: 'open' | 'closed' | 'failed';
