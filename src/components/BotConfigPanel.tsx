@@ -72,6 +72,33 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
           </div>
 
           <div>
+            <label className="block text-xs text-gray-400 mb-1.5">🎯 Plataforma de entrada</label>
+            <select
+              value={config.entryPlatform}
+              disabled={isRunning}
+              onChange={e => updateConfig('entryPlatform', e.target.value as BotConfig['entryPlatform'])}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none disabled:opacity-50"
+            >
+              <option value="both">Ambas: Pump.fun + Raydium</option>
+              <option value="pump.fun">Solo Pump.fun</option>
+              <option value="raydium">Solo Raydium</option>
+            </select>
+          </div>
+
+          <div className="flex items-end">
+            <label className="flex items-center gap-3 text-sm text-gray-300 pb-2">
+              <input
+                type="checkbox"
+                checked={config.graduatedOnly}
+                disabled={isRunning}
+                onChange={e => updateConfig('graduatedOnly', e.target.checked)}
+                className="h-4 w-4 accent-green-500"
+              />
+              Solo tokens graduados de Pump.fun
+            </label>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">🔄 Máx. Operaciones Simultáneas</label>
             <input
               type="number"

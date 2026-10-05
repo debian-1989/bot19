@@ -13,6 +13,8 @@ import { raydiumService, RaydiumToken } from './services/raydium';
 
 const defaultConfig: BotConfig = {
   executionMode: 'demo',
+  entryPlatform: 'both',
+  graduatedOnly: true,
   rpcEndpoint: 'https://api.mainnet-beta.solana.com',
   walletAddress: '',
   tradeAmount: 0.1,
@@ -211,7 +213,11 @@ function App() {
       const candidates: Candidate[] = [
         ...currentPumpTokens.map(token => ({ token, platform: 'pump.fun' as const, price: pumpFunRealService.calculateTokenPrice(token) })),
         ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 }))
-      ].filter(candidate => !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`));
+      ].filter(candidate => {
+        if (currentConfig.entryPlatform !== 'both' && candidate.platform !== currentConfig.entryPlatform) return false;
+        if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
+        return !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`);
+      });
 
       if (candidates.length === 0) {
         return;

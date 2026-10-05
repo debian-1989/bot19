@@ -21,17 +21,27 @@ export interface RaydiumPool {
   id: string;
   mintA: {
     symbol: string;
-    mint: string;
+    mint?: string;
+    address?: string;
+    name?: string;
+    logoURI?: string;
     decimals: number;
   };
   mintB: {
     symbol: string;
-    mint: string;
+    mint?: string;
+    address?: string;
+    name?: string;
+    logoURI?: string;
     decimals: number;
   };
   price: number;
   liquidity: number;
-  volume24h: number;
+  volume24h?: number;
+  tvl?: number;
+  day?: { volume?: number; volumeQuote?: number };
+  openTime?: string | number;
+  launchMigratePool?: boolean;
   fee24h: number;
   apr24h: number;
   type: string;
@@ -145,29 +155,35 @@ class RaydiumService {
   private convertPoolsToTokens(pools: RaydiumPool[]): RaydiumToken[] {
     const tokens: RaydiumToken[] = [];
     for (const pool of pools) {
-      const isSol = (mint: { symbol: string; mint: string }) =>
-        mint.symbol === 'SOL' || mint.symbol === 'WSOL' || mint.mint === 'So11111111111111111111111111111111111111112';
+      const isSol = (mint: { symbol: string; mint?: string; address?: string }) =>
+        mint.symbol === 'SOL' || mint.symbol === 'WSOL' ||
+        mint.mint === 'So11111111111111111111111111111111111111112' ||
+        (mint as typeof mint & { address?: string }).address === 'So11111111111111111111111111111111111111112';
       const tokenSide = isSol(pool.mintA) ? pool.mintB : pool.mintA;
       const hasSolPair = isSol(pool.mintA) || isSol(pool.mintB);
-      if (!hasSolPair || !tokenSide?.mint) continue;
+      const tokenMint = tokenSide?.mint || tokenSide?.address;
+      if (!hasSolPair || !tokenMint) continue;
+      const volume24h = Number(pool.volume24h || pool.day?.volume || 0);
+      const liquidity = Number(pool.liquidity || pool.tvl || 0);
 
       tokens.push({
         id: pool.id,
-        mint: tokenSide.mint,
+        mint: tokenMint,
         symbol: tokenSide.symbol,
-        name: tokenSide.symbol,
+        name: tokenSide.name || tokenSide.symbol,
         decimals: tokenSide.decimals,
-        logoURI: '',
+        logoURI: tokenSide.logoURI || '',
         tags: [],
-        daily_volume: Number(pool.volume24h || 0),
-        daily_volume_usd: Number(pool.volume24h || 0) * Number(pool.price || 0),
+        daily_volume: volume24h,
+        daily_volume_usd: Number(pool.day?.volumeQuote || volume24h),
         price: Number(pool.price || 0),
-        liquidity: Number(pool.liquidity || 0),
-        liquidity_usd: Number(pool.liquidity || 0) * Number(pool.price || 0),
-        market_cap: Number(pool.liquidity || 0) * Number(pool.price || 0) * 10,
-        market_cap_usd: Number(pool.liquidity || 0) * Number(pool.price || 0) * 10,
-        create_time: Number((pool as RaydiumPool & { createTime?: number; openTime?: number }).createTime ||
-          (pool as RaydiumPool & { openTime?: number }).openTime || Date.now()),
+        liquidity,
+        liquidity_usd: liquidity,
+        // Raydium API v3 no proporciona market cap en este endpoint; no
+        // inventar una capitalización a partir del TVL.
+        market_cap: 0,
+        market_cap_usd: 0,
+        create_time: Number(pool.openTime || Date.now()),
       });
     }
     return tokens;

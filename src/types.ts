@@ -1,5 +1,7 @@
 export interface BotConfig {
   executionMode: 'demo' | 'real';
+  entryPlatform: 'both' | 'pump.fun' | 'raydium';
+  graduatedOnly: boolean;
   rpcEndpoint: string;
   walletAddress: string;
   tradeAmount: number;
