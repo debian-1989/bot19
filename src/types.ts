@@ -29,6 +29,7 @@ export interface BotConfig {
   maxBitcoinSpreadPercent: number;
   bitcoinFeeRate: number;
   bitcoinTradingDirection: 'both' | 'long' | 'short';
+  bitcoinTrendFilter: boolean;
 }
 
 export interface DetectedTransaction {

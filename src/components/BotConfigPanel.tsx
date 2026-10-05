@@ -287,6 +287,17 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             <p className="text-xs text-yellow-300/70 mt-1">El short se simula en Demo. Para ejecutarlo en real se requeriría Margin/Futures, no Spot.</p>
           </div>
 
+          <div className="flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Filtro de seguimiento de tendencia</p>
+              <p className="text-xs text-gray-400">EMA 9/21 + RSI 14 en velas de 1 minuto</p>
+            </div>
+            <button type="button" disabled={isRunning} onClick={() => updateConfig('bitcoinTrendFilter', !config.bitcoinTrendFilter)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.bitcoinTrendFilter ? 'bg-blue-600' : 'bg-gray-700'} disabled:opacity-50`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.bitcoinTrendFilter ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">🏷️ Capitalización máxima estimada (USD)</label>
             <input

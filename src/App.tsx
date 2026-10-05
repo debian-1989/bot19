@@ -43,6 +43,7 @@ const defaultConfig: BotConfig = {
   maxBitcoinSpreadPercent: 0.25,
   bitcoinFeeRate: 0.001,
   bitcoinTradingDirection: 'both',
+  bitcoinTrendFilter: true,
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -256,6 +257,7 @@ function App() {
         if (!allowed) return false;
         if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
         if (candidate.platform === 'bitcoin') {
+          if (currentConfig.bitcoinTrendFilter && (!currentBitcoinToken.trendReady || currentBitcoinToken.trendDirection === 'neutral')) return false;
           const hasOpenBitcoin = currentTrades.some(trade => trade.status === 'open' && trade.tokenAddress === 'BTCUSDT');
           return !hasOpenBitcoin && Date.now() - lastBitcoinEntryRef.current >= 10_000;
         }
@@ -292,8 +294,11 @@ function App() {
             ? 'short'
             : currentConfig.bitcoinTradingDirection === 'long'
               ? 'long'
-              : currentBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
+              : currentConfig.bitcoinTrendFilter && currentBitcoinToken.trendReady
+                ? currentBitcoinToken.trendDirection as 'long' | 'short'
+                : currentBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
           : 'long';
+        if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter && direction !== currentBitcoinToken.trendDirection) continue;
         const quality = evaluateCandidate(candidate, currentConfig, quoteAmount);
         if (!quality.accepted) {
           const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
@@ -573,6 +578,7 @@ function App() {
               <p className={`text-[10px] font-semibold ${bitcoinStatus.connected ? 'text-green-400' : 'text-red-400'}`}>
                 {bitcoinStatus.connected ? '● Binance API conectada' : '● Binance API desconectada'}
               </p>
+              {bitcoinToken.trendReady && <p className="text-[10px] text-blue-300">Tendencia: {bitcoinToken.trendDirection.toUpperCase()} · RSI {bitcoinToken.rsi.toFixed(1)}</p>}
             </div>
             <button
               onClick={toggleBot}

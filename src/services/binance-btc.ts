@@ -9,6 +9,12 @@ export interface BitcoinMarketToken {
   liquidity: number;
   dailyVolume: number;
   priceChangePercent: number;
+  trendDirection: 'long' | 'short' | 'neutral';
+  trendStrength: number;
+  emaFast: number;
+  emaSlow: number;
+  rsi: number;
+  trendReady: boolean;
   create_time: number;
 }
 
@@ -34,7 +40,8 @@ class BinanceBitcoinService {
   private token: BitcoinMarketToken = {
     mint: 'BTCUSDT', name: 'Bitcoin', symbol: 'BTC', price: 0,
     bidPrice: 0, askPrice: 0, spreadPercent: 0, liquidity: 0,
-    dailyVolume: 0, priceChangePercent: 0, create_time: Date.now(),
+    dailyVolume: 0, priceChangePercent: 0, trendDirection: 'neutral', trendStrength: 0,
+    emaFast: 0, emaSlow: 0, rsi: 50, trendReady: false, create_time: Date.now(),
   };
   private listeners: TokenListener[] = [];
   private statusListeners: StatusListener[] = [];
@@ -86,26 +93,53 @@ class BinanceBitcoinService {
   private async refreshSnapshot() {
     const started = performance.now();
     try {
-      const [book, ticker] = await Promise.all([
+      const [book, ticker, klines] = await Promise.all([
         this.fetchJson('/depth?symbol=BTCUSDT&limit=20'),
         this.fetchJson('/ticker/24hr?symbol=BTCUSDT'),
+        this.fetchJson('/klines?symbol=BTCUSDT&interval=1m&limit=100'),
       ]);
       const bid = Number(book.bids?.[0]?.[0] || 0);
       const ask = Number(book.asks?.[0]?.[0] || 0);
       const bidLiquidity = (book.bids || []).reduce((sum: number, row: string[]) => sum + Number(row[0]) * Number(row[1]), 0);
       const askLiquidity = (book.asks || []).reduce((sum: number, row: string[]) => sum + Number(row[0]) * Number(row[1]), 0);
       const price = Number(ticker.lastPrice || (bid + ask) / 2 || 0);
-      this.setStatus({ requestCount: this.status.requestCount + 2, latencyMs: Math.round(performance.now() - started) });
+      const closes = (klines || []).map((candle: unknown[]) => Number(candle[4])).filter((value: number) => value > 0);
+      const trend = this.calculateTrend(closes);
+      this.setStatus({ requestCount: this.status.requestCount + 3, latencyMs: Math.round(performance.now() - started) });
       this.update({
         price, bidPrice: bid, askPrice: ask,
         spreadPercent: price > 0 ? ((ask - bid) / price) * 100 : 0,
         liquidity: (bidLiquidity + askLiquidity) / 2,
         dailyVolume: Number(ticker.quoteVolume || 0),
         priceChangePercent: Number(ticker.priceChangePercent || 0),
+        ...trend,
       });
     } catch (error) {
       this.setStatus({ error: error instanceof Error ? error.message : 'Error Binance REST' });
     }
+  }
+
+  private calculateTrend(closes: number[]): Pick<BitcoinMarketToken, 'trendDirection' | 'trendStrength' | 'emaFast' | 'emaSlow' | 'rsi' | 'trendReady'> {
+    if (closes.length < 30) return { trendDirection: 'neutral', trendStrength: 0, emaFast: 0, emaSlow: 0, rsi: 50, trendReady: false };
+    const ema = (period: number) => {
+      const multiplier = 2 / (period + 1);
+      let value = closes.slice(0, period).reduce((sum, price) => sum + price, 0) / period;
+      for (const price of closes.slice(period)) value = (price - value) * multiplier + value;
+      return value;
+    };
+    const fast = ema(9);
+    const slow = ema(21);
+    const changes = closes.slice(1).map((price, index) => price - closes[index]);
+    const gains = changes.slice(-14).filter(change => change > 0).reduce((sum, change) => sum + change, 0) / 14;
+    const losses = changes.slice(-14).filter(change => change < 0).reduce((sum, change) => sum - change, 0) / 14;
+    const rsi = losses === 0 ? 100 : 100 - (100 / (1 + gains / losses));
+    const strength = slow > 0 ? Math.abs((fast - slow) / slow) * 100 : 0;
+    const trendDirection = strength >= 0.03 && fast > slow && rsi >= 50 && rsi <= 75
+      ? 'long'
+      : strength >= 0.03 && fast < slow && rsi >= 25 && rsi <= 50
+        ? 'short'
+        : 'neutral';
+    return { trendDirection, trendStrength: strength, emaFast: fast, emaSlow: slow, rsi, trendReady: true };
   }
 
   private applyDepth(data: { bids?: string[][]; asks?: string[][] }) {
