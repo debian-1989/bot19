@@ -10,7 +10,7 @@ import TestingPanel from './components/TestingPanel';
 import ConnectionStatus from './components/ConnectionStatus';
 import { pumpFunRealService, PumpFunToken } from './services/pumpfun-real';
 import { raydiumService, RaydiumToken } from './services/raydium';
-import { binanceBitcoinService, BitcoinMarketToken } from './services/binance-btc';
+import { binanceBitcoinService, BitcoinMarketToken, BitcoinServiceStatus } from './services/binance-btc';
 
 const defaultConfig: BotConfig = {
   executionMode: 'demo',
@@ -160,6 +160,7 @@ function App() {
   const [realTokens, setRealTokens] = useState<PumpFunToken[]>([]);
   const [raydiumTokens, setRaydiumTokens] = useState<RaydiumToken[]>([]);
   const [bitcoinToken, setBitcoinToken] = useState<BitcoinMarketToken>(binanceBitcoinService.getToken());
+  const [bitcoinStatus, setBitcoinStatus] = useState<BitcoinServiceStatus>(binanceBitcoinService.getStatus());
   
   const configRef = useRef(config);
   const tradesRef = useRef(trades);
@@ -216,6 +217,10 @@ function App() {
 
   useEffect(() => {
     return binanceBitcoinService.onTokenUpdate(token => setBitcoinToken(token));
+  }, []);
+
+  useEffect(() => {
+    return binanceBitcoinService.onStatusUpdate(status => setBitcoinStatus(status));
   }, []);
 
   // Simular detección de compras usando tokens reales de Solana y Bitcoin
@@ -476,8 +481,8 @@ function App() {
       addLog('✅ Conectado a pump.fun - Obteniendo tokens (polling cada 1s)');
       addLog('🔗 Conectando a Raydium Launchpad...');
       raydiumService.startPolling(5000);
-      binanceBitcoinService.startPolling(5000);
-      addLog('₿ Conectando a Binance BTC/USDT (datos públicos en tiempo real)');
+      binanceBitcoinService.startPolling(10000);
+      addLog('₿ Conectando a Binance BTC/USDT | WebSocket trade + depth 100ms | REST respaldo 10s');
       addLog('✅ Conectado a Raydium - Obteniendo tokens');
       addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
       addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');
@@ -531,6 +536,9 @@ function App() {
               <p className="text-xs text-gray-400">Saldos Demo</p>
               <p className="text-sm font-bold text-yellow-400">{solBalance.toFixed(3)} SOL</p>
               <p className="text-sm font-bold text-orange-300">{usdBalance.toFixed(2)} USDT</p>
+              <p className={`text-[10px] font-semibold ${bitcoinStatus.connected ? 'text-green-400' : 'text-red-400'}`}>
+                {bitcoinStatus.connected ? '● Binance API conectada' : '● Binance API desconectada'}
+              </p>
             </div>
             <button
               onClick={toggleBot}

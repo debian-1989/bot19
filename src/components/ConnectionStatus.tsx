@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { pumpFunRealService } from '../services/pumpfun-real';
 import { raydiumService } from '../services/raydium';
+import { binanceBitcoinService } from '../services/binance-btc';
 
 interface ConnectionStatus {
   pumpfun: {
@@ -31,6 +32,7 @@ interface ConnectionStatus {
     latency?: number;
     error?: string;
   };
+  binance: ReturnType<typeof binanceBitcoinService.getStatus>;
 }
 
 export default function ConnectionStatus() {
@@ -59,6 +61,7 @@ export default function ConnectionStatus() {
       connected: false,
       rpcEndpoint: 'https://api.mainnet-beta.solana.com',
     },
+    binance: binanceBitcoinService.getStatus(),
   });
 
   const [testing, setTesting] = useState(false);
@@ -68,6 +71,7 @@ export default function ConnectionStatus() {
     const interval = setInterval(() => {
       const pumpStatus = pumpFunRealService.getStatus();
       const rayStatus = raydiumService.getStatus();
+      const binanceStatus = binanceBitcoinService.getStatus();
 
       setStatus(prev => ({
         ...prev,
@@ -93,6 +97,7 @@ export default function ConnectionStatus() {
           lastError: rayStatus.lastError,
           mode: rayStatus.isConnected ? 'real' : 'disconnected',
         },
+        binance: binanceStatus,
       }));
     }, 1000);
 
@@ -194,6 +199,17 @@ export default function ConnectionStatus() {
     }
   };
 
+  // Probar conexión a Binance usando el feed público real
+  const testBinanceConnection = async () => {
+    try {
+      binanceBitcoinService.startPolling(10000);
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      setStatus(prev => ({ ...prev, binance: binanceBitcoinService.getStatus() }));
+    } catch (error) {
+      setStatus(prev => ({ ...prev, binance: { ...prev.binance, connected: false, error: error instanceof Error ? error.message : 'Error Binance' } }));
+    }
+  };
+
   // Probar todas las conexiones
   const testAllConnections = async () => {
     setTesting(true);
@@ -201,6 +217,7 @@ export default function ConnectionStatus() {
       testSolanaConnection(),
       testPumpFunConnection(),
       testRaydiumConnection(),
+      testBinanceConnection(),
     ]);
     setTesting(false);
   };
@@ -453,6 +470,26 @@ export default function ConnectionStatus() {
           >
             Probar Conexión
           </button>
+        </div>
+
+        {/* Binance BTC/USDT */}
+        <div className="bg-gray-900 rounded-xl border border-orange-500/20 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-white flex items-center gap-2"><span>₿</span> Binance BTC/USDT</h3>
+            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${status.binance.connected ? 'text-green-400 bg-green-500/20' : 'text-red-400 bg-red-500/20'}`}>
+              {status.binance.connected ? '✅ ONLINE' : '❌ OFFLINE'}
+            </span>
+          </div>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-gray-400">API:</span><span className={status.binance.connected ? 'text-green-400' : 'text-red-400'}>{status.binance.connected ? 'Conectada' : 'Desconectada'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">WebSocket:</span><span className={status.binance.websocketConnected ? 'text-green-400' : 'text-yellow-400'}>{status.binance.websocketConnected ? 'Trade + depth 100ms' : 'No activo'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">REST:</span><span className={status.binance.restConnected ? 'text-green-400' : 'text-yellow-400'}>{status.binance.restConnected ? 'OK' : 'Pendiente'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Latencia:</span><span className="text-gray-300">{status.binance.latencyMs !== null ? `${status.binance.latencyMs}ms` : 'N/A'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">REST usados:</span><span className="text-gray-300">{status.binance.requestCount}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Última actualización:</span><span className="text-gray-300">{formatTime(status.binance.lastUpdate)}</span></div>
+            {status.binance.error && <div className="mt-2 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">Error: {status.binance.error}</div>}
+          </div>
+          <button onClick={testBinanceConnection} className="w-full mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors">Probar conexión real</button>
         </div>
       </div>
 
