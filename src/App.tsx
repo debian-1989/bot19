@@ -10,6 +10,7 @@ import TestingPanel from './components/TestingPanel';
 import ConnectionStatus from './components/ConnectionStatus';
 import { pumpFunRealService, PumpFunToken } from './services/pumpfun-real';
 import { raydiumService, RaydiumToken } from './services/raydium';
+import { binanceBitcoinService, BitcoinMarketToken } from './services/binance-btc';
 
 const defaultConfig: BotConfig = {
   executionMode: 'demo',
@@ -38,6 +39,9 @@ const defaultConfig: BotConfig = {
   minRaydiumVolume: 0.1,
   gasStrategy: 'fast',
   jitoBundle: true,
+  bitcoinTradeAmountUsd: 20,
+  maxBitcoinSpreadPercent: 0.25,
+  bitcoinFeeRate: 0.001,
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -56,10 +60,17 @@ const PAPER_COMPUTE_UNITS = 200_000;
 const estimatePaperFee = (config: BotConfig) =>
   0.000005 + (config.priorityFee * PAPER_COMPUTE_UNITS) / 1_000_000_000_000_000;
 
+const estimateBitcoinPaperFee = (config: BotConfig, quoteAmount: number) =>
+  quoteAmount * Math.max(0, config.bitcoinFeeRate);
+
 const estimatePriceImpact = (candidate: {
-  platform: 'pump.fun' | 'raydium';
-  token: PumpFunToken | RaydiumToken;
+  platform: 'pump.fun' | 'raydium' | 'bitcoin';
+  token: PumpFunToken | RaydiumToken | BitcoinMarketToken;
 }, solAmount: number) => {
+  if (candidate.platform === 'bitcoin') {
+    const token = candidate.token as BitcoinMarketToken;
+    return Math.min(0.05, (token.spreadPercent / 100) + (0.001 / Math.max(token.liquidity / Math.max(solAmount, 1), 1)));
+  }
   if (candidate.platform === 'pump.fun') {
     const token = candidate.token as PumpFunToken;
     const reserveSol = token.virtual_sol_reserves > 1_000_000
@@ -73,8 +84,8 @@ const estimatePriceImpact = (candidate: {
 };
 
 type Candidate = {
-  token: PumpFunToken | RaydiumToken;
-  platform: 'pump.fun' | 'raydium';
+  token: PumpFunToken | RaydiumToken | BitcoinMarketToken;
+  platform: 'pump.fun' | 'raydium' | 'bitcoin';
   price: number;
 };
 
@@ -85,6 +96,12 @@ const getTimestampMs = (value: number) => {
 
 const evaluateCandidate = (candidate: Candidate, config: BotConfig, amount: number) => {
   const token = candidate.token;
+  if (candidate.platform === 'bitcoin') {
+    const btc = token as BitcoinMarketToken;
+    if (!btc.price || btc.price <= 0) return { accepted: false, reason: 'precio BTC no disponible' };
+    if (btc.spreadPercent > config.maxBitcoinSpreadPercent) return { accepted: false, reason: `spread BTC ${btc.spreadPercent.toFixed(3)}% > máximo ${config.maxBitcoinSpreadPercent}%` };
+    return { accepted: true, reason: '', liquidity: btc.liquidity, marketCap: 0, volume: btc.dailyVolume, ageSeconds: 0, impactPercent: btc.spreadPercent };
+  }
   const liquidity = candidate.platform === 'pump.fun'
     ? ((token as PumpFunToken).virtual_sol_reserves > 1_000_000
       ? (token as PumpFunToken).virtual_sol_reserves / 1_000_000_000
@@ -137,15 +154,19 @@ function App() {
     activeSince: new Date(),
   });
   const [solBalance, setSolBalance] = useState(0.5);
+  const [usdBalance, setUsdBalance] = useState(1000);
+  const usdBalanceRef = useRef(usdBalance);
   const [logs, setLogs] = useState<string[]>([]);
   const [realTokens, setRealTokens] = useState<PumpFunToken[]>([]);
   const [raydiumTokens, setRaydiumTokens] = useState<RaydiumToken[]>([]);
+  const [bitcoinToken, setBitcoinToken] = useState<BitcoinMarketToken>(binanceBitcoinService.getToken());
   
   const configRef = useRef(config);
   const tradesRef = useRef(trades);
   const solBalanceRef = useRef(solBalance);
   const tokensRef = useRef<PumpFunToken[]>([]);
   const raydiumTokensRef = useRef<RaydiumToken[]>([]);
+  const bitcoinTokenRef = useRef(bitcoinToken);
   const processedTokenKeysRef = useRef<Set<string>>(new Set());
   const qualityLogRef = useRef<Map<string, number>>(new Map());
   
@@ -153,9 +174,11 @@ function App() {
     configRef.current = config;
     tradesRef.current = trades;
     solBalanceRef.current = solBalance;
+    usdBalanceRef.current = usdBalance;
     tokensRef.current = realTokens;
     raydiumTokensRef.current = raydiumTokens;
-  }, [config, trades, solBalance, realTokens, raydiumTokens]);
+    bitcoinTokenRef.current = bitcoinToken;
+  }, [config, trades, solBalance, usdBalance, realTokens, raydiumTokens, bitcoinToken]);
 
   const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -191,7 +214,11 @@ function App() {
     };
   }, [addLog]);
 
-  // Simular detección de compras usando tokens reales de pump.fun y Raydium
+  useEffect(() => {
+    return binanceBitcoinService.onTokenUpdate(token => setBitcoinToken(token));
+  }, []);
+
+  // Simular detección de compras usando tokens reales de Solana y Bitcoin
   useEffect(() => {
     if (!isRunning) return;
 
@@ -204,17 +231,22 @@ function App() {
       const currentBalance = solBalanceRef.current;
       const currentPumpTokens = tokensRef.current;
       const currentRaydiumTokens = raydiumTokensRef.current;
+      const currentBitcoinToken = bitcoinTokenRef.current;
 
       console.log('[App] Detection interval triggered', {
         pumpTokens: currentPumpTokens.length,
         raydiumTokens: currentRaydiumTokens.length,
+        bitcoinPrice: currentBitcoinToken.price,
       });
 
       const candidates: Candidate[] = [
         ...currentPumpTokens.map(token => ({ token, platform: 'pump.fun' as const, price: pumpFunRealService.calculateTokenPrice(token) })),
-        ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 }))
+        ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 })),
+        { token: currentBitcoinToken, platform: 'bitcoin' as const, price: currentBitcoinToken.price },
       ].filter(candidate => {
-        if (currentConfig.entryPlatform !== 'both' && candidate.platform !== currentConfig.entryPlatform) return false;
+        const selected = currentConfig.entryPlatform;
+        const allowed = selected === 'all' || selected === 'both' && candidate.platform !== 'bitcoin' || selected === 'solana' && candidate.platform !== 'bitcoin' || selected === candidate.platform;
+        if (!allowed) return false;
         if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
         return !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`);
       });
@@ -227,11 +259,12 @@ function App() {
       // para que varias órdenes del mismo ciclo no sobrepasen el saldo real.
       let localOpenTrades = currentTrades.filter((t: Trade) => t.status === 'open').length;
       let localAvailableCapital = currentBalance;
+      let localAvailableUsd = usdBalanceRef.current;
       const minEntry = currentConfig.tradeAmount * 0.1;
 
       for (const candidate of candidates) {
         if (!currentConfig.autoSnipe) break;
-        if (localOpenTrades >= currentConfig.maxConcurrentTrades || localAvailableCapital < minEntry) break;
+        if (localOpenTrades >= currentConfig.maxConcurrentTrades) break;
 
         const token = candidate.token;
         const platform = candidate.platform;
@@ -242,7 +275,8 @@ function App() {
           continue;
         }
 
-        const quality = evaluateCandidate(candidate, currentConfig, currentConfig.tradeAmount);
+        const quoteAmount = platform === 'bitcoin' ? currentConfig.bitcoinTradeAmountUsd : currentConfig.tradeAmount;
+        const quality = evaluateCandidate(candidate, currentConfig, quoteAmount);
         if (!quality.accepted) {
           const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
           if (Date.now() - lastLogged > 10_000) {
@@ -252,22 +286,20 @@ function App() {
           continue;
         }
 
-        const buyAmount = Number(currentConfig.tradeAmount.toFixed(3));
+        const buyAmount = Number(quoteAmount.toFixed(platform === 'bitcoin' ? 2 : 3));
         const newTx: DetectedTransaction = {
           id: generateId(), timestamp: new Date(), buyerAddress: randomAddress(),
           tokenAddress: token.mint, tokenName: token.name, tokenSymbol: token.symbol,
-          buyAmount, estimatedPrice: realPrice, status: 'detected', platform,
+          buyAmount, estimatedPrice: realPrice, status: 'detected', platform, quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL',
         };
         setDetectedTxns(prev => [newTx, ...prev].slice(0, 100));
-        const platformIcon = platform === 'pump.fun' ? '🎯' : '🌊';
-        addLog(`${platformIcon} Detectada: ${buyAmount} SOL en $${token.symbol} (${platform})`);
+        const platformIcon = platform === 'pump.fun' ? '🎯' : platform === 'raydium' ? '🌊' : '₿';
+        addLog(`${platformIcon} Detectada: ${buyAmount} ${platform === 'bitcoin' ? 'USDT' : 'SOL'} en $${token.symbol} (${platform})`);
 
-        const entryFee = estimatePaperFee(currentConfig);
-        const snipeAmount = Math.min(
-          currentConfig.tradeAmount,
-          Math.max(0, (localAvailableCapital - entryFee) * 0.95)
-        );
-        if (snipeAmount < minEntry) break;
+        const entryFee = platform === 'bitcoin' ? estimateBitcoinPaperFee(currentConfig, quoteAmount) : estimatePaperFee(currentConfig);
+        const available = platform === 'bitcoin' ? localAvailableUsd : localAvailableCapital;
+        const snipeAmount = Math.min(quoteAmount, Math.max(0, (available - entryFee) * 0.95));
+        if (snipeAmount < (platform === 'bitcoin' ? quoteAmount * 0.1 : minEntry)) break;
 
         // Estimar una ejecución realista: impacto de liquidez + una fracción
         // conservadora del slippage permitido, sin inventar un precio aleatorio.
@@ -278,26 +310,29 @@ function App() {
         const ourBuyPrice = realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
         processedTokenKeysRef.current.add(tokenKey);
-        localAvailableCapital -= snipeAmount + entryFee;
+        if (platform === 'bitcoin') localAvailableUsd -= snipeAmount + entryFee;
+        else localAvailableCapital -= snipeAmount + entryFee;
         localOpenTrades += 1;
 
-        addLog(`⚡ PAPER BUY: ${snipeAmount.toFixed(3)} SOL en $${token.symbol} | impacto ${(impact * 100).toFixed(2)}% | fee ${entryFee.toFixed(6)} SOL`);
+        const currency = platform === 'bitcoin' ? 'USDT' : 'SOL';
+        addLog(`⚡ PAPER BUY: ${snipeAmount.toFixed(platform === 'bitcoin' ? 2 : 3)} ${currency} en $${token.symbol} | impacto ${(impact * 100).toFixed(2)}% | fee ${entryFee.toFixed(platform === 'bitcoin' ? 4 : 6)} ${currency}`);
         const newTrade: Trade = {
           id: generateId(), timestamp: new Date(), tokenAddress: token.mint,
           tokenName: token.name, tokenSymbol: token.symbol, platform, buyAmount: snipeAmount,
-          buyPrice: ourBuyPrice, tokenAmount, lastMarketPrice: realPrice, entryFee, status: 'open',
+          buyPrice: ourBuyPrice, tokenAmount, lastMarketPrice: realPrice, entryFee,
+          quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL', status: 'open',
         };
 
         setTrades(prev => [newTrade, ...prev]);
-        setSolBalance(prev => prev - snipeAmount - entryFee);
+        if (platform === 'bitcoin') { setUsdBalance(prev => prev - snipeAmount - entryFee); usdBalanceRef.current = localAvailableUsd; }
+        else { setSolBalance(prev => prev - snipeAmount - entryFee); solBalanceRef.current = localAvailableCapital; }
         tradesRef.current = [newTrade, ...tradesRef.current];
-        solBalanceRef.current = localAvailableCapital;
         setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { ...tx, status: 'sniped' as const, ourBuyPrice } : tx));
       }
 
       if (localOpenTrades >= currentConfig.maxConcurrentTrades) {
         addLog(`⏳ Máx posiciones (${localOpenTrades}/${currentConfig.maxConcurrentTrades}); candidatos restantes quedan en cola`);
-      } else if (localAvailableCapital < minEntry) {
+      } else if (localAvailableCapital < minEntry && localAvailableUsd < currentConfig.bitcoinTradeAmountUsd * 0.1) {
         addLog(`⏳ Capital bajo: ${localAvailableCapital.toFixed(4)} SOL; candidatos restantes quedan en cola`);
       }
     }, Math.random() * 150 + 50); // 0.05-0.2 segundos (antes 0.2-0.8s)
@@ -314,6 +349,7 @@ function App() {
       const currentTrades = tradesRef.current;
       const currentPumpTokens = tokensRef.current;
       const currentRaydiumTokens = raydiumTokensRef.current;
+      const currentBitcoinToken = bitcoinTokenRef.current;
       const now = Date.now();
       
       currentTrades.forEach(trade => {
@@ -322,13 +358,17 @@ function App() {
         const tradeAge = now - trade.timestamp.getTime();
         const maxAge = currentConfig.timeBasedExit * 1000;
 
-        const liveCandidate = trade.platform === 'pump.fun'
-          ? currentPumpTokens.find(token => token.mint === trade.tokenAddress)
-          : currentRaydiumTokens.find(token => token.mint === trade.tokenAddress);
+        const liveCandidate = trade.platform === 'bitcoin'
+          ? (currentBitcoinToken.mint === trade.tokenAddress ? currentBitcoinToken : undefined)
+          : trade.platform === 'pump.fun'
+            ? currentPumpTokens.find(token => token.mint === trade.tokenAddress)
+            : currentRaydiumTokens.find(token => token.mint === trade.tokenAddress);
         const marketPrice = liveCandidate
-          ? trade.platform === 'pump.fun'
-            ? pumpFunRealService.calculateTokenPrice(liveCandidate as PumpFunToken)
-            : Number((liveCandidate as RaydiumToken).price || 0)
+          ? trade.platform === 'bitcoin'
+            ? Number((liveCandidate as BitcoinMarketToken).price || 0)
+            : trade.platform === 'pump.fun'
+              ? pumpFunRealService.calculateTokenPrice(liveCandidate as PumpFunToken)
+              : Number((liveCandidate as RaydiumToken).price || 0)
           : trade.lastMarketPrice;
 
         // Si el feed dejó de mostrar el token, conservamos el último precio
@@ -350,7 +390,7 @@ function App() {
         const sellPrice = effectiveMarketPrice * Math.max(0, 1 - exitImpact - exitSlippage);
         const tokenAmount = trade.tokenAmount || trade.buyAmount / Math.max(trade.buyPrice, Number.EPSILON);
         const sellAmount = tokenAmount * sellPrice;
-        const exitFee = estimatePaperFee(currentConfig);
+        const exitFee = trade.platform === 'bitcoin' ? estimateBitcoinPaperFee(currentConfig, sellAmount) : estimatePaperFee(currentConfig);
         const profitSOL = sellAmount - exitFee - trade.buyAmount - (trade.entryFee || 0);
         const investedSOL = trade.buyAmount + (trade.entryFee || 0);
         const profitPercent = investedSOL > 0 ? (profitSOL / investedSOL) * 100 : 0;
@@ -363,7 +403,7 @@ function App() {
         } else if (profitPercent <= -currentConfig.stopLossPercent) {
           exitReason = `STOP LOSS a ${profitPercent.toFixed(1)}%`;
         } else if (Math.abs(profitSOL) >= currentConfig.maxLossPerTrade && profitSOL < 0) {
-          exitReason = `PÉRDIDA MÁXIMA: ${profitSOL.toFixed(4)} SOL`;
+          exitReason = `PÉRDIDA MÁXIMA: ${profitSOL.toFixed(4)} ${trade.quoteCurrency || 'SOL'}`;
         } else if (timeExit) {
           exitReason = `SALIDA POR TIEMPO a precio vivo`;
         } else if (profitPercent >= currentConfig.trailingStopActivation) {
@@ -385,13 +425,13 @@ function App() {
           txHash: `PAPER-${generateId()}`,
         };
 
-        setSolBalance(prev => prev + sellAmount - exitFee);
-        solBalanceRef.current += sellAmount - exitFee;
+        if (trade.platform === 'bitcoin') { setUsdBalance(prev => prev + sellAmount - exitFee); usdBalanceRef.current += sellAmount - exitFee; }
+        else { setSolBalance(prev => prev + sellAmount - exitFee); solBalanceRef.current += sellAmount - exitFee; }
         tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);
         setTrades(prev => prev.map(t => t.id === trade.id ? closedTrade : t));
 
         const emoji = profitSOL >= 0 ? '💰' : '🛑';
-        addLog(`${emoji} ${exitReason}: $${trade.tokenSymbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} SOL (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%) | precio vivo`);
+        addLog(`${emoji} ${exitReason}: $${trade.tokenSymbol} | ${profitSOL >= 0 ? '+' : ''}${profitSOL.toFixed(4)} ${trade.quoteCurrency || 'SOL'} (${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%) | precio vivo`);
       });
     }, 1000);
 
@@ -436,6 +476,8 @@ function App() {
       addLog('✅ Conectado a pump.fun - Obteniendo tokens (polling cada 1s)');
       addLog('🔗 Conectando a Raydium Launchpad...');
       raydiumService.startPolling(5000);
+      binanceBitcoinService.startPolling(5000);
+      addLog('₿ Conectando a Binance BTC/USDT (datos públicos en tiempo real)');
       addLog('✅ Conectado a Raydium - Obteniendo tokens');
       addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
       addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');
@@ -446,6 +488,7 @@ function App() {
       pumpFunRealService.stopPolling();
       addLog('🔌 Desconectando de Raydium...');
       raydiumService.stopPolling();
+      binanceBitcoinService.stopPolling();
     }
   };
 

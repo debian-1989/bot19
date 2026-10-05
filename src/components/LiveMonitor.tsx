@@ -87,11 +87,9 @@ export default function LiveMonitor({ detectedTxns, isRunning }: LiveMonitorProp
                           <p className="text-xs text-gray-500">{tx.tokenName}</p>
                         </div>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          tx.platform === 'pump.fun' 
-                            ? 'bg-blue-500/20 text-blue-400' 
-                            : 'bg-purple-500/20 text-purple-400'
+                          tx.platform === 'pump.fun' ? 'bg-blue-500/20 text-blue-400' : tx.platform === 'bitcoin' ? 'bg-orange-500/20 text-orange-400' : 'bg-purple-500/20 text-purple-400'
                         }`}>
-                          {tx.platform === 'pump.fun' ? '🎯 pump' : '🌊 ray'}
+                          {tx.platform === 'pump.fun' ? '🎯 pump' : tx.platform === 'bitcoin' ? '₿ BTC' : '🌊 ray'}
                         </span>
                       </div>
                     </td>
@@ -99,7 +97,7 @@ export default function LiveMonitor({ detectedTxns, isRunning }: LiveMonitorProp
                       {tx.buyerAddress.slice(0, 6)}...{tx.buyerAddress.slice(-4)}
                     </td>
                     <td className="px-4 py-3 text-sm text-yellow-400 font-semibold">
-                      {tx.buyAmount.toFixed(3)} SOL
+                      {tx.buyAmount.toFixed(tx.quoteCurrency === 'USDT' ? 2 : 3)} {tx.quoteCurrency || 'SOL'}
                     </td>
                     <td className="px-4 py-3 text-xs text-gray-400 font-mono">
                       {tx.estimatedPrice.toFixed(8)}

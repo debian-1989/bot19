@@ -72,6 +72,14 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
           </div>
 
           <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Monto por Operación Bitcoin (USDT)</label>
+            <input type="number" min="1" step="1" value={config.bitcoinTradeAmountUsd}
+              onChange={e => updateConfig('bitcoinTradeAmountUsd', Math.max(1, Number.parseFloat(e.target.value) || 1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none" />
+            <p className="text-xs text-gray-500 mt-1">Saldo Demo inicial separado: 1,000 USDT.</p>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">🎯 Plataforma de entrada</label>
             <select
               value={config.entryPlatform}
@@ -79,9 +87,12 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
               onChange={e => updateConfig('entryPlatform', e.target.value as BotConfig['entryPlatform'])}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none disabled:opacity-50"
             >
-              <option value="both">Ambas: Pump.fun + Raydium</option>
+              <option value="both">Solana: Pump.fun + Raydium</option>
+              <option value="all">Todas: Solana + Bitcoin</option>
+              <option value="solana">Solo red Solana</option>
               <option value="pump.fun">Solo Pump.fun</option>
               <option value="raydium">Solo Raydium</option>
+              <option value="bitcoin">Solo Bitcoin (BTC/USDT)</option>
             </select>
           </div>
 
@@ -247,6 +258,21 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
               onChange={e => updateConfig('minRaydiumVolume', Math.max(0, Number.parseFloat(e.target.value) || 0))}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
             />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Spread máximo BTC (%)</label>
+            <input type="number" min="0.01" step="0.01" value={config.maxBitcoinSpreadPercent}
+              onChange={e => updateConfig('maxBitcoinSpreadPercent', Math.max(0.01, Number.parseFloat(e.target.value) || 0.01))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none" />
+            <p className="text-xs text-gray-500 mt-1">Se calcula con el libro de órdenes público de Binance.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Comisión paper Binance (%)</label>
+            <input type="number" min="0" max="5" step="0.01" value={config.bitcoinFeeRate * 100}
+              onChange={e => updateConfig('bitcoinFeeRate', Math.max(0, Number.parseFloat(e.target.value) || 0) / 100)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none" />
           </div>
 
           <div>

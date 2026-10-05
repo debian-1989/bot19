@@ -1,6 +1,6 @@
 export interface BotConfig {
   executionMode: 'demo' | 'real';
-  entryPlatform: 'both' | 'pump.fun' | 'raydium';
+  entryPlatform: 'both' | 'solana' | 'pump.fun' | 'raydium' | 'bitcoin' | 'all';
   graduatedOnly: boolean;
   rpcEndpoint: string;
   walletAddress: string;
@@ -25,6 +25,9 @@ export interface BotConfig {
   minRaydiumVolume: number;
   gasStrategy: 'standard' | 'fast' | 'instant';
   jitoBundle: boolean;
+  bitcoinTradeAmountUsd: number;
+  maxBitcoinSpreadPercent: number;
+  bitcoinFeeRate: number;
 }
 
 export interface DetectedTransaction {
@@ -41,7 +44,8 @@ export interface DetectedTransaction {
   ourSellPrice?: number;
   profit?: number;
   profitPercent?: number;
-  platform: 'pump.fun' | 'raydium';
+  platform: 'pump.fun' | 'raydium' | 'bitcoin';
+  quoteCurrency?: 'SOL' | 'USDT';
 }
 
 export interface Trade {
@@ -50,7 +54,8 @@ export interface Trade {
   tokenAddress: string;
   tokenName: string;
   tokenSymbol: string;
-  platform?: 'pump.fun' | 'raydium';
+  platform?: 'pump.fun' | 'raydium' | 'bitcoin';
+  quoteCurrency?: 'SOL' | 'USDT';
   buyAmount: number;
   buyPrice: number;
   tokenAmount?: number;
