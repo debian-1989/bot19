@@ -171,6 +171,7 @@ function App() {
   const bitcoinTokenRef = useRef(bitcoinToken);
   const processedTokenKeysRef = useRef<Set<string>>(new Set());
   const qualityLogRef = useRef<Map<string, number>>(new Map());
+  const lastBitcoinEntryRef = useRef(0);
   
   useEffect(() => {
     configRef.current = config;
@@ -254,6 +255,10 @@ function App() {
         const allowed = selected === 'all' || selected === 'both' && candidate.platform !== 'bitcoin' || selected === 'solana' && candidate.platform !== 'bitcoin' || selected === candidate.platform;
         if (!allowed) return false;
         if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
+        if (candidate.platform === 'bitcoin') {
+          const hasOpenBitcoin = currentTrades.some(trade => trade.status === 'open' && trade.tokenAddress === 'BTCUSDT');
+          return !hasOpenBitcoin && Date.now() - lastBitcoinEntryRef.current >= 10_000;
+        }
         return !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`);
       });
 
@@ -325,6 +330,7 @@ function App() {
           : realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
         processedTokenKeysRef.current.add(tokenKey);
+        if (platform === 'bitcoin') lastBitcoinEntryRef.current = Date.now();
         if (platform === 'bitcoin') localAvailableUsd -= snipeAmount + entryFee;
         else localAvailableCapital -= snipeAmount + entryFee;
         localOpenTrades += 1;
