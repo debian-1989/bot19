@@ -28,6 +28,7 @@ export interface BotConfig {
   bitcoinTradeAmountUsd: number;
   maxBitcoinSpreadPercent: number;
   bitcoinFeeRate: number;
+  bitcoinTradingDirection: 'both' | 'long' | 'short';
 }
 
 export interface DetectedTransaction {
@@ -46,6 +47,7 @@ export interface DetectedTransaction {
   profitPercent?: number;
   platform: 'pump.fun' | 'raydium' | 'bitcoin';
   quoteCurrency?: 'SOL' | 'USDT';
+  direction?: 'long' | 'short';
 }
 
 export interface Trade {
@@ -56,6 +58,7 @@ export interface Trade {
   tokenSymbol: string;
   platform?: 'pump.fun' | 'raydium' | 'bitcoin';
   quoteCurrency?: 'SOL' | 'USDT';
+  direction?: 'long' | 'short';
   buyAmount: number;
   buyPrice: number;
   tokenAmount?: number;

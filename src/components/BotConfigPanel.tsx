@@ -276,6 +276,18 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
           </div>
 
           <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Dirección de trading BTC</label>
+            <select value={config.bitcoinTradingDirection} disabled={isRunning}
+              onChange={e => updateConfig('bitcoinTradingDirection', e.target.value as BotConfig['bitcoinTradingDirection'])}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none disabled:opacity-50">
+              <option value="both">Ambos sentidos — long + short Demo</option>
+              <option value="long">Solo long — comprar y vender</option>
+              <option value="short">Solo short — vender y recomprar</option>
+            </select>
+            <p className="text-xs text-yellow-300/70 mt-1">El short se simula en Demo. Para ejecutarlo en real se requeriría Margin/Futures, no Spot.</p>
+          </div>
+
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">🏷️ Capitalización máxima estimada (USD)</label>
             <input
               type="number"

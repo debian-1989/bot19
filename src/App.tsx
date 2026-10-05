@@ -42,6 +42,7 @@ const defaultConfig: BotConfig = {
   bitcoinTradeAmountUsd: 20,
   maxBitcoinSpreadPercent: 0.25,
   bitcoinFeeRate: 0.001,
+  bitcoinTradingDirection: 'both',
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -281,6 +282,13 @@ function App() {
         }
 
         const quoteAmount = platform === 'bitcoin' ? currentConfig.bitcoinTradeAmountUsd : currentConfig.tradeAmount;
+        const direction: 'long' | 'short' = platform === 'bitcoin'
+          ? currentConfig.bitcoinTradingDirection === 'short'
+            ? 'short'
+            : currentConfig.bitcoinTradingDirection === 'long'
+              ? 'long'
+              : currentBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
+          : 'long';
         const quality = evaluateCandidate(candidate, currentConfig, quoteAmount);
         if (!quality.accepted) {
           const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
@@ -295,11 +303,11 @@ function App() {
         const newTx: DetectedTransaction = {
           id: generateId(), timestamp: new Date(), buyerAddress: randomAddress(),
           tokenAddress: token.mint, tokenName: token.name, tokenSymbol: token.symbol,
-          buyAmount, estimatedPrice: realPrice, status: 'detected', platform, quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL',
+          buyAmount, estimatedPrice: realPrice, status: 'detected', platform, quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL', direction,
         };
         setDetectedTxns(prev => [newTx, ...prev].slice(0, 100));
         const platformIcon = platform === 'pump.fun' ? '🎯' : platform === 'raydium' ? '🌊' : '₿';
-        addLog(`${platformIcon} Detectada: ${buyAmount} ${platform === 'bitcoin' ? 'USDT' : 'SOL'} en $${token.symbol} (${platform})`);
+        addLog(`${platformIcon} Detectada: ${buyAmount} ${platform === 'bitcoin' ? 'USDT' : 'SOL'} en $${token.symbol} (${platform}${platform === 'bitcoin' ? `, ${direction.toUpperCase()}` : ''})`);
 
         const entryFee = platform === 'bitcoin' ? estimateBitcoinPaperFee(currentConfig, quoteAmount) : estimatePaperFee(currentConfig);
         const available = platform === 'bitcoin' ? localAvailableUsd : localAvailableCapital;
@@ -312,7 +320,9 @@ function App() {
         const simulatedSlippage = currentConfig.slippage > 0
           ? Math.min(currentConfig.slippage / 100, Math.max(0.0005, impact * 0.5))
           : 0;
-        const ourBuyPrice = realPrice * (1 + impact + simulatedSlippage);
+        const ourBuyPrice = direction === 'short'
+          ? realPrice * Math.max(0, 1 - impact - simulatedSlippage)
+          : realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
         processedTokenKeysRef.current.add(tokenKey);
         if (platform === 'bitcoin') localAvailableUsd -= snipeAmount + entryFee;
@@ -320,12 +330,12 @@ function App() {
         localOpenTrades += 1;
 
         const currency = platform === 'bitcoin' ? 'USDT' : 'SOL';
-        addLog(`⚡ PAPER BUY: ${snipeAmount.toFixed(platform === 'bitcoin' ? 2 : 3)} ${currency} en $${token.symbol} | impacto ${(impact * 100).toFixed(2)}% | fee ${entryFee.toFixed(platform === 'bitcoin' ? 4 : 6)} ${currency}`);
+        addLog(`⚡ PAPER ${direction === 'short' ? 'SHORT SELL' : 'BUY'}: ${snipeAmount.toFixed(platform === 'bitcoin' ? 2 : 3)} ${currency} en $${token.symbol} | impacto ${(impact * 100).toFixed(2)}% | fee ${entryFee.toFixed(platform === 'bitcoin' ? 4 : 6)} ${currency}`);
         const newTrade: Trade = {
           id: generateId(), timestamp: new Date(), tokenAddress: token.mint,
           tokenName: token.name, tokenSymbol: token.symbol, platform, buyAmount: snipeAmount,
           buyPrice: ourBuyPrice, tokenAmount, lastMarketPrice: realPrice, entryFee,
-          quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL', status: 'open',
+          quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL', direction, status: 'open',
         };
 
         setTrades(prev => [newTrade, ...prev]);
@@ -392,14 +402,20 @@ function App() {
         const exitSlippage = currentConfig.slippage > 0
           ? Math.min(currentConfig.slippage / 100, Math.max(0.0005, exitImpact * 0.5))
           : 0;
-        const sellPrice = effectiveMarketPrice * Math.max(0, 1 - exitImpact - exitSlippage);
+        const sellPrice = trade.direction === 'short'
+          ? effectiveMarketPrice * (1 + exitImpact + exitSlippage)
+          : effectiveMarketPrice * Math.max(0, 1 - exitImpact - exitSlippage);
         const tokenAmount = trade.tokenAmount || trade.buyAmount / Math.max(trade.buyPrice, Number.EPSILON);
         const sellAmount = tokenAmount * sellPrice;
         const exitFee = trade.platform === 'bitcoin' ? estimateBitcoinPaperFee(currentConfig, sellAmount) : estimatePaperFee(currentConfig);
-        const profitSOL = sellAmount - exitFee - trade.buyAmount - (trade.entryFee || 0);
+        const profitSOL = trade.direction === 'short'
+          ? (trade.buyPrice - sellPrice) * tokenAmount - exitFee - (trade.entryFee || 0)
+          : sellAmount - exitFee - trade.buyAmount - (trade.entryFee || 0);
         const investedSOL = trade.buyAmount + (trade.entryFee || 0);
         const profitPercent = investedSOL > 0 ? (profitSOL / investedSOL) * 100 : 0;
-        const priceMultiplier = sellPrice / Math.max(trade.buyPrice, Number.EPSILON);
+        const priceMultiplier = trade.direction === 'short'
+          ? trade.buyPrice / Math.max(sellPrice, Number.EPSILON)
+          : sellPrice / Math.max(trade.buyPrice, Number.EPSILON);
         const timeExit = tradeAge >= maxAge;
 
         let exitReason = '';
@@ -430,7 +446,10 @@ function App() {
           txHash: `PAPER-${generateId()}`,
         };
 
-        if (trade.platform === 'bitcoin') { setUsdBalance(prev => prev + sellAmount - exitFee); usdBalanceRef.current += sellAmount - exitFee; }
+        if (trade.platform === 'bitcoin') {
+          const balanceDelta = trade.direction === 'short' ? trade.buyAmount + profitSOL : sellAmount - exitFee;
+          setUsdBalance(prev => prev + balanceDelta); usdBalanceRef.current += balanceDelta;
+        }
         else { setSolBalance(prev => prev + sellAmount - exitFee); solBalanceRef.current += sellAmount - exitFee; }
         tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);
         setTrades(prev => prev.map(t => t.id === trade.id ? closedTrade : t));

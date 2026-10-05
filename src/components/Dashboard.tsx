@@ -163,6 +163,7 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
                       <div>
                         <p className="font-semibold text-sm text-white">${trade.tokenSymbol}</p>
                         <p className="text-xs text-gray-400">{trade.tokenName}</p>
+                        {trade.platform === 'bitcoin' && <span className={`text-[10px] font-bold ${trade.direction === 'short' ? 'text-red-300' : 'text-green-300'}`}>{trade.direction === 'short' ? 'SHORT SIMULADO' : 'LONG'}</span>}
                       </div>
                       <div className="text-right">
                         <p className={`text-sm font-bold ${trade.quoteCurrency === 'USDT' ? 'text-orange-300' : 'text-yellow-400'}`}>{trade.buyAmount.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 3)} {trade.quoteCurrency || 'SOL'}</p>

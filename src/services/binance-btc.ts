@@ -8,6 +8,7 @@ export interface BitcoinMarketToken {
   spreadPercent: number;
   liquidity: number;
   dailyVolume: number;
+  priceChangePercent: number;
   create_time: number;
 }
 
@@ -33,7 +34,7 @@ class BinanceBitcoinService {
   private token: BitcoinMarketToken = {
     mint: 'BTCUSDT', name: 'Bitcoin', symbol: 'BTC', price: 0,
     bidPrice: 0, askPrice: 0, spreadPercent: 0, liquidity: 0,
-    dailyVolume: 0, create_time: Date.now(),
+    dailyVolume: 0, priceChangePercent: 0, create_time: Date.now(),
   };
   private listeners: TokenListener[] = [];
   private statusListeners: StatusListener[] = [];
@@ -100,6 +101,7 @@ class BinanceBitcoinService {
         spreadPercent: price > 0 ? ((ask - bid) / price) * 100 : 0,
         liquidity: (bidLiquidity + askLiquidity) / 2,
         dailyVolume: Number(ticker.quoteVolume || 0),
+        priceChangePercent: Number(ticker.priceChangePercent || 0),
       });
     } catch (error) {
       this.setStatus({ error: error instanceof Error ? error.message : 'Error Binance REST' });

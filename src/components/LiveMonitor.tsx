@@ -90,6 +90,7 @@ export default function LiveMonitor({ detectedTxns, isRunning }: LiveMonitorProp
                           tx.platform === 'pump.fun' ? 'bg-blue-500/20 text-blue-400' : tx.platform === 'bitcoin' ? 'bg-orange-500/20 text-orange-400' : 'bg-purple-500/20 text-purple-400'
                         }`}>
                           {tx.platform === 'pump.fun' ? '🎯 pump' : tx.platform === 'bitcoin' ? '₿ BTC' : '🌊 ray'}
+                          {tx.platform === 'bitcoin' && ` · ${tx.direction === 'short' ? 'SHORT' : 'LONG'}`}
                         </span>
                       </div>
                     </td>
