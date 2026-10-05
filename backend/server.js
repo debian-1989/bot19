@@ -418,6 +418,12 @@ app.get('/api/raydium/pool/:id', async (req, res) => {
 async function initializeServices() {
   console.log('\n🚀 Iniciando servicios...\n');
 
+  if (config.networkMode === 'bitcoin') {
+    console.log('[Init] ₿ NETWORK_MODE=bitcoin: Solana/Helius y Pump.fun quedan desactivados.');
+    console.log('[Init] Binance se consume desde el adaptador público del frontend o su servicio dedicado.\n');
+    return;
+  }
+
   // 1. Inicializar conexión Solana
   try {
     console.log('[Init] Conectando a Solana...');
@@ -494,7 +500,8 @@ async function start() {
   console.log('📋 Configuración:');
   console.log(`   Modo: ${config.tradingMode}`);
   console.log(`   Live trading: ${config.enableLiveTrading ? 'HABILITADO' : 'DESACTIVADO'}`);
-  console.log(`   RPC: ${config.solanaRpcUrl.substring(0, 50)}...`);
+  console.log(`   Red: ${config.networkMode}`);
+  console.log(`   RPC: ${config.solanaRpcUrl ? config.solanaRpcUrl.substring(0, 50) + '...' : 'No requerido'}`);
   console.log(`   Puerto: ${config.port}`);
   console.log('');
 

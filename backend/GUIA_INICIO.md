@@ -150,6 +150,24 @@ Asegúrate de que el backend tenga `cors()` habilitado (ya está por defecto)
 - Confiabilidad: 95-99% 🎯
 - Costo: Gratis
 
+## ₿ Ejecutar solo Bitcoin sin consumir Helius
+
+La integración Demo de Binance utiliza datos públicos directamente desde el frontend. Si aun así quieres levantar el backend para health checks, wallet u otros servicios, puedes iniciarlo en modo aislado:
+
+```bash
+cd backend
+NETWORK_MODE=bitcoin SOLANA_RPC_URL='' SOLANA_WS_URL='' PORT=3002 npm start
+```
+
+En este modo el backend **no inicializa Solana, Helius ni el detector Pump.fun**. Para operar solamente BTC/USDT, selecciona en el frontend:
+
+```text
+Entrada: Bitcoin
+Dirección: Ambos sentidos — long + short Demo
+```
+
+Para Solana o ambas redes, usa `NETWORK_MODE=solana` o `NETWORK_MODE=both` y configura las variables RPC normalmente.
+
 ## 🎓 Próximos Pasos
 
 1. ✅ Backend instalado y corriendo
@@ -163,7 +181,7 @@ Asegúrate de que el backend tenga `cors()` habilitado (ya está por defecto)
 Revisa:
 - `backend/README.md` - Documentación completa
 - Consola del navegador (F12) - Logs del frontend
-- Terminal del backend - Logs del servidor
+- Terminal del backend - Logs del backend
 
 ---
 

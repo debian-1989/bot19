@@ -22,6 +22,11 @@ class Config {
   validate() {
     console.log('[Config] Validando configuración...');
 
+    this.networkMode = process.env.NETWORK_MODE || 'both';
+    if (!['solana', 'bitcoin', 'both'].includes(this.networkMode)) {
+      throw new ConfigError(`NETWORK_MODE inválido: ${this.networkMode}. Debe ser solana, bitcoin o both`);
+    }
+
     // Validar modo de trading
     this.tradingMode = process.env.TRADING_MODE || 'paper';
     if (!['paper', 'live'].includes(this.tradingMode)) {
@@ -35,12 +40,12 @@ class Config {
     }
 
     // Validar RPC URLs
-    this.solanaRpcUrl = process.env.SOLANA_RPC_URL;
-    if (!this.solanaRpcUrl) {
-      throw new ConfigError('SOLANA_RPC_URL es obligatorio');
+    this.solanaRpcUrl = process.env.SOLANA_RPC_URL || '';
+    if (this.networkMode !== 'bitcoin' && !this.solanaRpcUrl) {
+      throw new ConfigError('SOLANA_RPC_URL es obligatorio cuando NETWORK_MODE no es bitcoin');
     }
 
-    if (!this.solanaRpcUrl.startsWith('http://') && !this.solanaRpcUrl.startsWith('https://')) {
+    if (this.solanaRpcUrl && !this.solanaRpcUrl.startsWith('http://') && !this.solanaRpcUrl.startsWith('https://')) {
       throw new ConfigError('SOLANA_RPC_URL debe ser una URL HTTP/HTTPS válida');
     }
 
@@ -49,7 +54,7 @@ class Config {
       throw new ConfigError('Debes reemplazar TU_API_KEY con tu API key real de Helius');
     }
 
-    this.solanaWsUrl = process.env.SOLANA_WS_URL;
+    this.solanaWsUrl = process.env.SOLANA_WS_URL || '';
     if (this.solanaWsUrl && !this.solanaWsUrl.startsWith('ws://') && !this.solanaWsUrl.startsWith('wss://')) {
       throw new ConfigError('SOLANA_WS_URL debe ser una URL WebSocket válida');
     }
@@ -144,7 +149,8 @@ class Config {
     return {
       tradingMode: this.tradingMode,
       enableLiveTrading: this.enableLiveTrading,
-      solanaRpcUrl: this.solanaRpcUrl.substring(0, 50) + '...',
+      networkMode: this.networkMode,
+      solanaRpcUrl: this.solanaRpcUrl ? this.solanaRpcUrl.substring(0, 50) + '...' : 'No requerido',
       solanaWsUrl: this.solanaWsUrl ? 'Configurada' : 'No configurada',
       pumpProgramId: this.pumpProgramId,
       walletConfigured: !!this.walletPrivateKey,

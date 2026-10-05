@@ -500,16 +500,25 @@ function App() {
     setIsRunning(newRunning);
     
     if (newRunning) {
+      const selectedNetwork = configRef.current.entryPlatform;
+      const useSolana = selectedNetwork !== 'bitcoin';
+      const useBitcoin = selectedNetwork === 'bitcoin' || selectedNetwork === 'all';
       addLog('🟢 Bot INICIADO');
-      addLog('🔗 Conectando a pump.fun...');
-      pumpFunRealService.startPolling(1000); // 1 segundo (antes 5s)
-      addLog('✅ Conectado a pump.fun - Obteniendo tokens (polling cada 1s)');
-      addLog('🔗 Conectando a Raydium Launchpad...');
-      raydiumService.startPolling(5000);
-      binanceBitcoinService.startPolling(10000);
-      addLog('₿ Conectando a Binance BTC/USDT | WebSocket trade + depth 100ms | REST respaldo 10s');
-      addLog('✅ Conectado a Raydium - Obteniendo tokens');
-      addLog('🚀 Monitoreando ambas plataformas: pump.fun + Raydium');
+      if (useSolana) {
+        addLog('🔗 Conectando a pump.fun...');
+        pumpFunRealService.startPolling(1000); // 1 segundo (antes 5s)
+        addLog('✅ Conectado a pump.fun - Obteniendo tokens (polling cada 1s)');
+        addLog('🔗 Conectando a Raydium Launchpad...');
+        raydiumService.startPolling(5000);
+        addLog('✅ Conectado a Raydium - Obteniendo tokens');
+      } else {
+        addLog('⏸️ Solana desactivada: no se consultarán Pump.fun, Raydium ni Helius');
+      }
+      if (useBitcoin) {
+        binanceBitcoinService.startPolling(10000);
+        addLog('₿ Conectando a Binance BTC/USDT | WebSocket trade + depth 100ms | REST respaldo 10s');
+      }
+      addLog(`🚀 Red activa: ${useSolana && useBitcoin ? 'Solana + Bitcoin' : useBitcoin ? 'Bitcoin' : 'Solana'}`);
       addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');
       addLog(`⚡ Detección ultra-rápida | fee estimada por lado: ${estimatePaperFee(configRef.current).toFixed(6)} SOL`);
     } else {
