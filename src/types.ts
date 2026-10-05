@@ -18,6 +18,9 @@ export interface BotConfig {
   autoSnipe: boolean;
   minLiquidity: number;
   maxMarketCap: number;
+  maxEntryImpactPercent: number;
+  minTokenAgeSeconds: number;
+  minRaydiumVolume: number;
   gasStrategy: 'standard' | 'fast' | 'instant';
   jitoBundle: boolean;
 }

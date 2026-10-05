@@ -166,6 +166,74 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             </p>
           </div>
 
+          <div className="md:col-span-2 border-t border-gray-800 pt-4 mt-2">
+            <p className="text-sm font-semibold text-white mb-3">🧪 Filtros de calidad de entrada</p>
+            <p className="text-xs text-gray-500 mb-3">
+              El bot rechazará candidatos que no superen estos mínimos. Reducir operaciones puede mejorar la calidad de la muestra.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">💧 Liquidez mínima (SOL)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={config.minLiquidity}
+              onChange={e => updateConfig('minLiquidity', Math.max(0, Number.parseFloat(e.target.value) || 0))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">📉 Impacto máximo de entrada (%)</label>
+            <input
+              type="number"
+              min="0.1"
+              max="50"
+              step="0.1"
+              value={config.maxEntryImpactPercent}
+              onChange={e => updateConfig('maxEntryImpactPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">🕒 Antigüedad mínima del token (segundos)</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={config.minTokenAgeSeconds}
+              onChange={e => updateConfig('minTokenAgeSeconds', Math.max(0, parseInt(e.target.value, 10) || 0))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">📊 Volumen mínimo Raydium (SOL/24h)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              value={config.minRaydiumVolume}
+              onChange={e => updateConfig('minRaydiumVolume', Math.max(0, Number.parseFloat(e.target.value) || 0))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">🏷️ Capitalización máxima estimada (USD)</label>
+            <input
+              type="number"
+              min="0"
+              step="1000"
+              value={config.maxMarketCap}
+              onChange={e => updateConfig('maxMarketCap', Math.max(0, Number.parseFloat(e.target.value) || 0))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none"
+            />
+          </div>
+
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">⏱️ Tiempo Máximo de Posición (segundos)</label>
             <input

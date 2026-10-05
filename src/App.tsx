@@ -31,6 +31,9 @@ const defaultConfig: BotConfig = {
   autoSnipe: true,
   minLiquidity: 0.5,
   maxMarketCap: 50000,
+  maxEntryImpactPercent: 4,
+  minTokenAgeSeconds: 5,
+  minRaydiumVolume: 0.1,
   gasStrategy: 'fast',
   jitoBundle: true,
 };
@@ -65,6 +68,46 @@ const estimatePriceImpact = (candidate: {
 
   const token = candidate.token as RaydiumToken;
   return Math.min(0.5, solAmount / Math.max(token.liquidity || 0, solAmount * 2));
+};
+
+type Candidate = {
+  token: PumpFunToken | RaydiumToken;
+  platform: 'pump.fun' | 'raydium';
+  price: number;
+};
+
+const getTimestampMs = (value: number) => {
+  if (!Number.isFinite(value) || value <= 0) return 0;
+  return value < 10_000_000_000 ? value * 1000 : value;
+};
+
+const evaluateCandidate = (candidate: Candidate, config: BotConfig, amount: number) => {
+  const token = candidate.token;
+  const liquidity = candidate.platform === 'pump.fun'
+    ? ((token as PumpFunToken).virtual_sol_reserves > 1_000_000
+      ? (token as PumpFunToken).virtual_sol_reserves / 1_000_000_000
+      : (token as PumpFunToken).virtual_sol_reserves)
+    : Number((token as RaydiumToken).liquidity || 0);
+  const marketCap = candidate.platform === 'pump.fun'
+    ? Number((token as PumpFunToken).usd_market_cap || (token as PumpFunToken).market_cap || 0)
+    : Number((token as RaydiumToken).market_cap_usd || (token as RaydiumToken).market_cap || 0);
+  const volume = candidate.platform === 'raydium'
+    ? Number((token as RaydiumToken).daily_volume || 0)
+    : 0;
+  const timestamp = candidate.platform === 'pump.fun'
+    ? (token as PumpFunToken).created_timestamp
+    : (token as RaydiumToken).create_time;
+  const timestampMs = getTimestampMs(timestamp);
+  const ageSeconds = timestampMs > 0 ? Math.max(0, (Date.now() - timestampMs) / 1000) : 0;
+  const impactPercent = estimatePriceImpact(candidate, amount) * 100;
+
+  if (liquidity < config.minLiquidity) return { accepted: false, reason: `liquidez ${liquidity.toFixed(3)} < mínimo ${config.minLiquidity}` };
+  if (config.maxMarketCap > 0 && marketCap > config.maxMarketCap) return { accepted: false, reason: `market cap ${marketCap.toFixed(0)} > máximo ${config.maxMarketCap}` };
+  if (timestampMs > 0 && ageSeconds < config.minTokenAgeSeconds) return { accepted: false, reason: `token demasiado nuevo (${ageSeconds.toFixed(0)}s)` };
+  if (candidate.platform === 'raydium' && volume < config.minRaydiumVolume) return { accepted: false, reason: `volumen Raydium ${volume.toFixed(3)} < mínimo ${config.minRaydiumVolume}` };
+  if (impactPercent > config.maxEntryImpactPercent) return { accepted: false, reason: `impacto ${impactPercent.toFixed(2)}% > máximo ${config.maxEntryImpactPercent}%` };
+
+  return { accepted: true, reason: '', liquidity, marketCap, volume, ageSeconds, impactPercent };
 };
 
 function App() {
@@ -102,6 +145,7 @@ function App() {
   const tokensRef = useRef<PumpFunToken[]>([]);
   const raydiumTokensRef = useRef<RaydiumToken[]>([]);
   const processedTokenKeysRef = useRef<Set<string>>(new Set());
+  const qualityLogRef = useRef<Map<string, number>>(new Map());
   
   useEffect(() => {
     configRef.current = config;
@@ -164,7 +208,7 @@ function App() {
         raydiumTokens: currentRaydiumTokens.length,
       });
 
-      const candidates = [
+      const candidates: Candidate[] = [
         ...currentPumpTokens.map(token => ({ token, platform: 'pump.fun' as const, price: pumpFunRealService.calculateTokenPrice(token) })),
         ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 }))
       ].filter(candidate => !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`));
@@ -189,6 +233,16 @@ function App() {
         const tokenKey = `${platform}:${token.mint}`;
         if (realPrice <= 0) {
           processedTokenKeysRef.current.add(tokenKey);
+          continue;
+        }
+
+        const quality = evaluateCandidate(candidate, currentConfig, currentConfig.tradeAmount);
+        if (!quality.accepted) {
+          const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
+          if (Date.now() - lastLogged > 10_000) {
+            addLog(`⛔ Rechazado $${token.symbol} (${platform}): ${quality.reason}`);
+            qualityLogRef.current.set(tokenKey, Date.now());
+          }
           continue;
         }
 
@@ -229,7 +283,7 @@ function App() {
         };
 
         setTrades(prev => [newTrade, ...prev]);
-        setSolBalance(prev => prev - snipeAmount);
+        setSolBalance(prev => prev - snipeAmount - entryFee);
         tradesRef.current = [newTrade, ...tradesRef.current];
         solBalanceRef.current = localAvailableCapital;
         setDetectedTxns(prev => prev.map(tx => tx.id === newTx.id ? { ...tx, status: 'sniped' as const, ourBuyPrice } : tx));
