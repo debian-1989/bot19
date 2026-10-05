@@ -7,7 +7,10 @@ interface TradeHistoryProps {
 
 export default function TradeHistory({ trades }: TradeHistoryProps) {
   const closedTrades = trades.filter(t => t.status === 'closed');
-  const totalProfit = closedTrades.reduce((sum, t) => sum + (t.profit || 0), 0);
+  const solClosed = closedTrades.filter(t => t.quoteCurrency !== 'USDT');
+  const btcClosed = closedTrades.filter(t => t.quoteCurrency === 'USDT');
+  const solProfit = solClosed.reduce((sum, t) => sum + (t.profit || 0), 0);
+  const btcProfit = btcClosed.reduce((sum, t) => sum + (t.profit || 0), 0);
 
   return (
     <div className="space-y-6">
@@ -26,8 +29,9 @@ export default function TradeHistory({ trades }: TradeHistoryProps) {
         </div>
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
           <p className="text-xs text-gray-400">G/P Realizado</p>
-          <p className={`text-2xl font-bold ${totalProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {totalProfit >= 0 ? '+' : ''}{totalProfit.toFixed(4)} SOL
+          <p className={`text-2xl font-bold ${solProfit + btcProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <span>{solProfit >= 0 ? '+' : ''}{solProfit.toFixed(4)} SOL</span>
+            <small className="block text-xs text-orange-300 mt-1">{btcProfit >= 0 ? '+' : ''}{btcProfit.toFixed(2)} USDT</small>
           </p>
         </div>
       </div>
@@ -69,11 +73,11 @@ export default function TradeHistory({ trades }: TradeHistoryProps) {
                       <p className="text-xs text-gray-500">{trade.tokenName}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-yellow-400 font-semibold">{trade.buyAmount.toFixed(3)} SOL</p>
+                      <p className={`text-sm font-semibold ${trade.quoteCurrency === 'USDT' ? 'text-orange-300' : 'text-yellow-400'}`}>{trade.buyAmount.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 3)} {trade.quoteCurrency || 'SOL'}</p>
                     </td>
                     <td className="px-4 py-3">
                       {trade.sellAmount ? (
-                        <p className="text-sm text-blue-400 font-semibold">{trade.sellAmount.toFixed(4)} SOL</p>
+                        <p className="text-sm text-blue-400 font-semibold">{trade.sellAmount.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 4)} {trade.quoteCurrency || 'SOL'}</p>
                       ) : (
                         <span className="text-xs text-gray-600">Pendiente...</span>
                       )}
@@ -81,7 +85,7 @@ export default function TradeHistory({ trades }: TradeHistoryProps) {
                     <td className="px-4 py-3">
                       {trade.profit !== undefined ? (
                         <span className={`text-sm font-bold ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {trade.profit >= 0 ? '+' : ''}{trade.profit.toFixed(4)}
+                          {trade.profit >= 0 ? '+' : ''}{trade.profit.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 4)} {trade.quoteCurrency || 'SOL'}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-600">—</span>

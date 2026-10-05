@@ -505,7 +505,7 @@ function App() {
             <span className={`px-3 py-1 rounded-full text-xs font-semibold ${isRunning ? 'bg-green-500/20 text-green-400 animate-pulse' : 'bg-red-500/20 text-red-400'}`}>
               {isRunning ? '● EJECUTANDO' : '● DETENIDO'}
             </span>
-            {(realTokens.length > 0 || raydiumTokens.length > 0) && (
+            {(realTokens.length > 0 || raydiumTokens.length > 0 || bitcoinToken.price > 0) && (
               <div className="flex gap-2">
                 {realTokens.length > 0 && (
                   <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400">
@@ -517,14 +517,20 @@ function App() {
                     🌊 {raydiumTokens.length} raydium
                   </span>
                 )}
+                {bitcoinToken.price > 0 && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-orange-500/20 text-orange-300">
+                    ₿ BTC ${bitcoinToken.price.toFixed(2)}
+                  </span>
+                )}
               </div>
             )}
           </div>
           
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-xs text-gray-400">Balance SOL</p>
+              <p className="text-xs text-gray-400">Saldos Demo</p>
               <p className="text-sm font-bold text-yellow-400">{solBalance.toFixed(3)} SOL</p>
+              <p className="text-sm font-bold text-orange-300">{usdBalance.toFixed(2)} USDT</p>
             </div>
             <button
               onClick={toggleBot}
@@ -541,7 +547,7 @@ function App() {
 
         <div className="p-6">
           {activeTab === 'dashboard' && (
-            <Dashboard stats={stats} logs={logs} detectedTxns={detectedTxns} trades={trades} isRunning={isRunning} />
+            <Dashboard stats={stats} logs={logs} detectedTxns={detectedTxns} trades={trades} isRunning={isRunning} solBalance={solBalance} usdBalance={usdBalance} />
           )}
           {activeTab === 'monitor' && (
             <LiveMonitor detectedTxns={detectedTxns} isRunning={isRunning} />
@@ -553,7 +559,7 @@ function App() {
             <TradeHistory trades={trades} />
           )}
           {activeTab === 'wallet' && (
-            <WalletPanel solBalance={solBalance} config={config} setConfig={setConfig} />
+            <WalletPanel solBalance={solBalance} usdBalance={usdBalance} bitcoinPrice={bitcoinToken.price} config={config} setConfig={setConfig} />
           )}
           {activeTab === 'testing' && (
             <TestingPanel />

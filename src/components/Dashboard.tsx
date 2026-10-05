@@ -7,24 +7,31 @@ interface DashboardProps {
   detectedTxns: DetectedTransaction[];
   trades: Trade[];
   isRunning: boolean;
+  solBalance: number;
+  usdBalance: number;
 }
 
-export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning }: DashboardProps) {
+export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning, solBalance, usdBalance }: DashboardProps) {
   const openTrades = trades.filter(t => t.status === 'open');
+  const solOpen = openTrades.filter(t => t.quoteCurrency !== 'USDT').reduce((sum, t) => sum + t.buyAmount, 0);
+  const usdOpen = openTrades.filter(t => t.quoteCurrency === 'USDT').reduce((sum, t) => sum + t.buyAmount, 0);
+  const closedTrades = trades.filter(t => t.status === 'closed');
+  const solProfit = closedTrades.filter(t => t.quoteCurrency !== 'USDT').reduce((sum, t) => sum + (t.profit || 0), 0);
+  const usdProfit = closedTrades.filter(t => t.quoteCurrency === 'USDT').reduce((sum, t) => sum + (t.profit || 0), 0);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title="Total de Operaciones" value={stats.totalTrades.toString()} icon="📈" color="blue" />
         <StatCard title="Tasa de Éxito" value={`${stats.winRate.toFixed(1)}%`} icon="🎯" color="green" />
-        <StatCard title="Ganancia Total" value={`${stats.totalProfit.toFixed(4)} SOL`} icon="💰" color={stats.totalProfit >= 0 ? 'green' : 'red'} />
-        <StatCard title="Ganancia Promedio/Operación" value={`${stats.avgProfitPerTrade.toFixed(4)} SOL`} icon="📊" color="purple" />
+        <StatCard title="Ganancia Total" value={<><span>{solProfit >= 0 ? ' + ' : ''}{solProfit.toFixed(4)} SOL</span><small className="block text-xs text-orange-300 mt-1">{usdProfit >= 0 ? '+' : ''}{usdProfit.toFixed(2)} USDT</small></>} icon="💰" color={stats.totalProfit >= 0 ? 'green' : 'red'} />
+        <StatCard title="Ganancia Promedio/Operación" value={<><span>{(solProfit / Math.max(1, closedTrades.filter(t => t.quoteCurrency !== 'USDT').length)).toFixed(4)} SOL</span><small className="block text-xs text-orange-300 mt-1">{(usdProfit / Math.max(1, closedTrades.filter(t => t.quoteCurrency === 'USDT').length)).toFixed(2)} USDT</small></>} icon="📊" color="purple" />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Mejor Operación" value={`${stats.bestTrade.toFixed(1)}%`} icon="🏆" color="yellow" />
         <StatCard title="Peor Operación" value={`${stats.worstTrade.toFixed(1)}%`} icon="📉" color="red" />
-        <StatCard title="Volumen Total" value={`${stats.totalVolume.toFixed(3)} SOL`} icon="🔄" color="cyan" />
+        <StatCard title="Volumen Total" value={<><span>{trades.filter(t => t.quoteCurrency !== 'USDT').reduce((sum, t) => sum + t.buyAmount, 0).toFixed(3)} SOL</span><small className="block text-xs text-orange-300 mt-1">{trades.filter(t => t.quoteCurrency === 'USDT').reduce((sum, t) => sum + t.buyAmount, 0).toFixed(2)} USDT</small></>} icon="🔄" color="cyan" />
       </div>
 
       {isRunning && (
@@ -34,10 +41,10 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
               <div className="flex items-center gap-3">
                 <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse" />
                 <div>
-                  <p className="text-sm font-semibold text-white">Conectado a Pump.fun y Raydium</p>
+                  <p className="text-sm font-semibold text-white">Conectado a Solana y Binance</p>
                   <p className="text-xs text-gray-400">
                     Monitoreando tokens reales en tiempo real • 
-                    <span className="text-purple-400 ml-1">pump.fun + raydium.io</span>
+                    <span className="text-purple-400 ml-1">pump.fun + raydium.io + BTC/USDT</span>
                   </p>
                 </div>
               </div>
@@ -76,26 +83,28 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Balance Total</p>
-              <p className="text-xl font-bold text-white">0.50 SOL</p>
+              <p className="text-xl font-bold text-white">{solBalance.toFixed(3)} SOL</p><p className="text-sm font-bold text-orange-300 mt-1">{usdBalance.toFixed(2)} USDT</p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Capital Disponible</p>
               <p className="text-xl font-bold text-green-400">
-                {(0.50 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)).toFixed(3)} SOL
+                {Math.max(0, solBalance - solOpen).toFixed(3)} SOL
+                <span className="block text-sm text-orange-300 mt-1">{Math.max(0, usdBalance - usdOpen).toFixed(2)} USDT</span>
               </p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">En Posiciones</p>
               <p className="text-xl font-bold text-yellow-400">
-                {trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0).toFixed(3)} SOL
+                {solOpen.toFixed(3)} SOL
+                <span className="block text-sm text-orange-300 mt-1">{usdOpen.toFixed(2)} USDT</span>
               </p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Trades Posibles</p>
               <p className="text-xl font-bold text-blue-400">
-                {Math.floor((0.50 - trades.filter(t => t.status === 'open').reduce((sum, t) => sum + t.buyAmount, 0)) / 0.1)}
+                {Math.floor(Math.max(0, solBalance - solOpen) / 0.1)} SOL / {Math.floor(Math.max(0, usdBalance - usdOpen) / 20)} BTC
               </p>
-              <p className="text-xs text-gray-500">a 0.1 SOL c/u</p>
+              <p className="text-xs text-gray-500">según saldo y monto configurado</p>
             </div>
           </div>
         </div>
@@ -156,7 +165,7 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
                         <p className="text-xs text-gray-400">{trade.tokenName}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-sm font-bold text-yellow-400">{trade.buyAmount.toFixed(3)} SOL</p>
+                        <p className={`text-sm font-bold ${trade.quoteCurrency === 'USDT' ? 'text-orange-300' : 'text-yellow-400'}`}>{trade.buyAmount.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 3)} {trade.quoteCurrency || 'SOL'}</p>
                         <p className="text-xs text-gray-400">@ {trade.buyPrice.toFixed(8)}</p>
                       </div>
                     </div>
@@ -222,7 +231,7 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
   );
 }
 
-function StatCard({ title, value, icon, color }: { title: string; value: string; icon: string; color: string }) {
+function StatCard({ title, value, icon, color }: { title: string; value: React.ReactNode; icon: string; color: string }) {
   const colorClasses: Record<string, string> = {
     blue: 'from-blue-500/10 to-blue-600/5 border-blue-500/20',
     green: 'from-green-500/10 to-green-600/5 border-green-500/20',

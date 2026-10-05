@@ -3,6 +3,8 @@ import { BotConfig } from '../types';
 
 interface WalletPanelProps {
   solBalance: number;
+  usdBalance: number;
+  bitcoinPrice: number;
   config: BotConfig;
   setConfig: (config: BotConfig) => void;
 }
@@ -16,7 +18,7 @@ interface WalletStatus {
   canTradeLive: boolean;
 }
 
-export default function WalletPanel({ solBalance, config, setConfig }: WalletPanelProps) {
+export default function WalletPanel({ solBalance, usdBalance, bitcoinPrice, config, setConfig }: WalletPanelProps) {
   const [wallet, setWallet] = useState<WalletStatus | null>(null);
   const [destination, setDestination] = useState('');
   const [amount, setAmount] = useState('');
@@ -70,9 +72,14 @@ export default function WalletPanel({ solBalance, config, setConfig }: WalletPan
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-gradient-to-br from-green-500/10 to-emerald-600/5 rounded-xl border border-green-500/20 p-6">
-          <p className="text-xs text-gray-400 mb-1">Balance de la wallet del bot</p>
+          <p className="text-xs text-gray-400 mb-1">Wallet Solana de la sesión</p>
           <p className="text-3xl font-bold text-white">{displayedBalance.toFixed(4)} SOL</p>
-          <p className="text-sm text-gray-400 mt-1">Saldo consultado en Solana</p>
+          <p className="text-sm text-gray-400 mt-1">Saldo on-chain consultado en Solana</p>
+        </div>
+        <div className="bg-gradient-to-br from-orange-500/10 to-yellow-600/5 rounded-xl border border-orange-500/20 p-6">
+          <p className="text-xs text-gray-400 mb-1">Balance Demo Bitcoin</p>
+          <p className="text-3xl font-bold text-orange-300">{usdBalance.toFixed(2)} USDT</p>
+          <p className="text-sm text-gray-400 mt-1">{bitcoinPrice > 0 ? `≈ ${(usdBalance / bitcoinPrice).toFixed(6)} BTC` : 'Precio BTC pendiente'}</p>
         </div>
         <div className="bg-gray-900 rounded-xl border border-gray-800 p-6">
           <p className="text-xs text-gray-400 mb-1">Modo actual</p>
@@ -90,7 +97,7 @@ export default function WalletPanel({ solBalance, config, setConfig }: WalletPan
 
       <div className="bg-gray-900 rounded-xl border border-gray-800 p-5">
         <h3 className="font-semibold text-white mb-4">🔐 Wallet propia de la sesión</h3>
-        <p className="text-xs text-gray-400 mb-2">Envía SOL únicamente a esta dirección cuando quieras operar en modo real:</p>
+        <p className="text-xs text-gray-400 mb-2">Envía SOL únicamente a esta dirección cuando quieras operar en modo real. El saldo USDT/BTC Demo se mantiene separado:</p>
         <div className="bg-gray-800 rounded-lg p-3 break-all font-mono text-sm text-green-300">
           {wallet?.address || 'Inicializando wallet...'}
         </div>
