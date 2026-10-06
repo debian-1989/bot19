@@ -236,6 +236,25 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             />
           </div>
 
+          <div className="flex items-center justify-between rounded-lg border border-purple-500/20 bg-purple-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Filtro inteligente de calidad</p>
+              <p className="text-xs text-gray-400">Score local del backend; no reemplaza los filtros de seguridad</p>
+            </div>
+            <button type="button" disabled={isRunning} onClick={() => updateConfig('aiQualityFilterEnabled', !config.aiQualityFilterEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.aiQualityFilterEnabled ? 'bg-purple-600' : 'bg-gray-700'} disabled:opacity-50`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.aiQualityFilterEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">🤖 Score mínimo de calidad (0–100)</label>
+            <input type="number" min="0" max="100" step="1" value={config.aiMinQualityScore} disabled={isRunning}
+              onChange={e => updateConfig('aiMinQualityScore', Math.min(100, Math.max(0, Number.parseFloat(e.target.value) || 0)))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-purple-500 focus:outline-none disabled:opacity-50" />
+            <p className="text-xs text-gray-500 mt-1">Valor inicial conservador: 72. Los tokens por debajo se observan/rechazan.</p>
+          </div>
+
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">🕒 Antigüedad mínima del token (segundos)</label>
             <input

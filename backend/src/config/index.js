@@ -100,6 +100,11 @@ class Config {
     this.minLiquidity = parseFloat(process.env.MIN_LIQUIDITY || '0.5');
     this.maxMarketCap = parseFloat(process.env.MAX_MARKET_CAP || '50000');
 
+    // Filtro inteligente local: score explicable, sin llamadas externas.
+    this.aiQualityFilterEnabled = process.env.AI_QUALITY_FILTER_ENABLED !== 'false';
+    this.aiMinQualityScore = Math.min(100, Math.max(0, parseFloat(process.env.AI_MIN_QUALITY_SCORE || '72')));
+    this.aiMinLiquiditySol = Math.max(0, parseFloat(process.env.AI_MIN_LIQUIDITY_SOL || '3'));
+
     // Estrategia de salida
     this.takeProfitMultiplier = parseFloat(process.env.TAKE_PROFIT_MULTIPLIER || '2.0');
     this.stopLossPercent = parseFloat(process.env.STOP_LOSS_PERCENT || '30');
@@ -159,6 +164,9 @@ class Config {
       tradeAmount: this.tradeAmount,
       gasStrategy: this.gasStrategy,
       priorityFee: this.selectedPriorityFee,
+      aiQualityFilterEnabled: this.aiQualityFilterEnabled,
+      aiMinQualityScore: this.aiMinQualityScore,
+      aiMinLiquiditySol: this.aiMinLiquiditySol,
       // NO incluir walletPrivateKey, API keys, etc.
     };
   }

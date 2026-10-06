@@ -9,4 +9,5 @@ build/
 .env.local
 .env.*.local
 backend/.env
+backend/src/intelligence/quality-observations.jsonl
 .wallet-sessions/

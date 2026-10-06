@@ -34,7 +34,9 @@ const defaultConfig: BotConfig = {
   autoSnipe: true,
   minLiquidity: 0.5,
   maxMarketCap: 50000,
-  maxEntryImpactPercent: 4,
+  maxEntryImpactPercent: 5,
+  aiQualityFilterEnabled: true,
+  aiMinQualityScore: 72,
   minTokenAgeSeconds: 5,
   minRaydiumVolume: 0.1,
   gasStrategy: 'fast',
@@ -104,6 +106,12 @@ const getTimestampMs = (value: number) => {
 
 const evaluateCandidate = (candidate: Candidate, config: BotConfig, amount: number) => {
   const token = candidate.token;
+  if (candidate.platform === 'pump.fun') {
+    const pumpToken = token as PumpFunToken;
+    if (config.aiQualityFilterEnabled && typeof pumpToken.qualityScore === 'number' && pumpToken.qualityScore < config.aiMinQualityScore) {
+      return { accepted: false, reason: `score IA ${pumpToken.qualityScore}/100 < mínimo ${config.aiMinQualityScore}` };
+    }
+  }
   if (candidate.platform === 'bitcoin') {
     const btc = token as BitcoinMarketToken;
     if (!btc.price || btc.price <= 0) return { accepted: false, reason: 'precio BTC no disponible' };

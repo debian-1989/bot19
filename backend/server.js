@@ -17,6 +17,7 @@ const { getConfig } = require('./src/config');
 const { getConnectionManager } = require('./src/solana/connection');
 const { getPumpFunDetector } = require('./src/detectors/pumpfun');
 const { SessionWallet } = require('./src/wallet/session-wallet');
+const { scoreToken, annotateToken, recordObservation } = require('./src/intelligence/quality-filter');
 
 // Validar configuración al inicio
 let config;
@@ -60,6 +61,10 @@ let sessionWallet;
 const recentPumpFunTokens = [];
 const MAX_RECENT_PUMP_FUN_TOKENS = 500;
 let pumpFunApiCache = { fetchedAt: 0, tokens: [] };
+
+function qualityOptions() {
+  return { minScore: config.aiMinQualityScore, minLiquiditySol: config.aiMinLiquiditySol };
+}
 
 function rememberPumpFunToken(event) {
   const exists = recentPumpFunTokens.some((token) => token.mint === event.mint || token.signature === event.signature);
@@ -349,14 +354,35 @@ app.get('/api/pumpfun/tokens', async (req, res) => {
   const unique = Array.from(new Map(
     merged.filter((token) => token.mint).map((token) => [token.mint, token])
   ).values()).slice(0, limit);
+  const scored = unique.map((token) => config.aiQualityFilterEnabled ? annotateToken(token, qualityOptions()) : token);
 
   res.json({
     success: true,
-    data: unique,
-    count: unique.length,
+    data: scored,
+    count: scored.length,
+    qualityFilter: config.aiQualityFilterEnabled ? { enabled: true, minScore: config.aiMinQualityScore, minLiquiditySol: config.aiMinLiquiditySol } : { enabled: false },
     source: apiTokens.length > 0 ? 'pumpfun-api-v3-plus-on-chain' : 'pumpfun-on-chain-websocket',
     warning: apiError || undefined,
     timestamp: Date.now()
+  });
+});
+
+app.post('/api/ai/score', (req, res) => {
+  if (!config.aiQualityFilterEnabled) return res.json({ success: true, enabled: false, data: null });
+  const token = req.body?.token || req.body || {};
+  const quality = scoreToken(token, qualityOptions());
+  if (req.body?.recordObservation) recordObservation(token, quality);
+  return res.json({ success: true, enabled: true, data: quality });
+});
+
+app.get('/api/ai/status', (req, res) => {
+  res.json({
+    success: true,
+    enabled: config.aiQualityFilterEnabled,
+    mode: 'local-quality-filter',
+    minScore: config.aiMinQualityScore,
+    minLiquiditySol: config.aiMinLiquiditySol,
+    description: 'Score explicable; no sustituye filtros de seguridad ni el motor de riesgo.'
   });
 });
 

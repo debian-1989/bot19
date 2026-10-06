@@ -14,6 +14,11 @@ export interface PumpFunToken {
   market_cap: number;
   king_of_the_hill_timestamp: number;
   usd_market_cap: number;
+  qualityScore?: number;
+  qualityDecision?: 'enter' | 'watch' | 'reject';
+  qualityConfidence?: number;
+  qualityReasons?: string[];
+  qualityWarnings?: string[];
 }
 
 export interface PumpFunTrade {

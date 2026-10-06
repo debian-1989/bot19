@@ -21,6 +21,8 @@ export interface BotConfig {
   minLiquidity: number;
   maxMarketCap: number;
   maxEntryImpactPercent: number;
+  aiQualityFilterEnabled: boolean;
+  aiMinQualityScore: number;
   minTokenAgeSeconds: number;
   minRaydiumVolume: number;
   gasStrategy: 'standard' | 'fast' | 'instant';
