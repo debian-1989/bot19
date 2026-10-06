@@ -72,6 +72,7 @@ export default function TradeHistory({ trades }: TradeHistoryProps) {
                       <p className="font-semibold text-sm text-white">${trade.tokenSymbol}</p>
                       <p className="text-xs text-gray-500">{trade.tokenName}</p>
                       {trade.platform === 'bitcoin' && <span className={`text-[10px] font-bold ${trade.direction === 'short' ? 'text-red-300' : 'text-green-300'}`}>{trade.direction === 'short' ? 'SHORT SIMULADO' : 'LONG'}</span>}
+                      {trade.exitReason && <p className="text-[10px] text-gray-500 mt-1">{trade.exitReason}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <p className={`text-sm font-semibold ${trade.quoteCurrency === 'USDT' ? 'text-orange-300' : 'text-yellow-400'}`}>{trade.buyAmount.toFixed(trade.quoteCurrency === 'USDT' ? 2 : 3)} {trade.quoteCurrency || 'SOL'}</p>

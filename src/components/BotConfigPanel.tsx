@@ -298,6 +298,52 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             </button>
           </div>
 
+          <div className="flex items-center justify-between rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Motor profesional de riesgo BTC</p>
+              <p className="text-xs text-gray-400">Stop ATR, break-even, trailing y salida por cambio de tendencia</p>
+            </div>
+            <button type="button" disabled={isRunning} onClick={() => updateConfig('bitcoinRiskEngine', !config.bitcoinRiskEngine)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.bitcoinRiskEngine ? 'bg-red-600' : 'bg-gray-700'} disabled:opacity-50`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.bitcoinRiskEngine ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Stop base BTC (%)</label>
+            <input type="number" min="0.1" max="10" step="0.05" value={config.bitcoinStopLossPercent}
+              onChange={e => updateConfig('bitcoinStopLossPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-red-500 focus:outline-none" />
+            <p className="text-xs text-gray-500 mt-1">Se usa el mayor entre este valor y 1.5× ATR.</p>
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Objetivo base BTC (%)</label>
+            <input type="number" min="0.1" max="20" step="0.05" value={config.bitcoinTakeProfitPercent}
+              onChange={e => updateConfig('bitcoinTakeProfitPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-green-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Activación break-even (%)</label>
+            <input type="number" min="0.1" max="10" step="0.05" value={config.bitcoinBreakEvenTriggerPercent}
+              onChange={e => updateConfig('bitcoinBreakEvenTriggerPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-yellow-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">₿ Trailing dinámico (× ATR)</label>
+            <input type="number" min="0.5" max="5" step="0.1" value={config.bitcoinTrailingAtrMultiplier}
+              onChange={e => updateConfig('bitcoinTrailingAtrMultiplier', Math.max(0.5, Number.parseFloat(e.target.value) || 0.5))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-orange-500 focus:outline-none" />
+          </div>
+
+          <label className="flex items-center gap-3 text-sm text-gray-300">
+            <input type="checkbox" checked={config.bitcoinExitOnTrendFlip} disabled={isRunning}
+              onChange={e => updateConfig('bitcoinExitOnTrendFlip', e.target.checked)} className="h-4 w-4 accent-orange-500" />
+            Cerrar BTC si la tendencia cambia de dirección
+          </label>
+
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">🏷️ Capitalización máxima estimada (USD)</label>
             <input

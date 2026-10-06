@@ -44,6 +44,12 @@ const defaultConfig: BotConfig = {
   bitcoinFeeRate: 0.001,
   bitcoinTradingDirection: 'both',
   bitcoinTrendFilter: true,
+  bitcoinRiskEngine: true,
+  bitcoinStopLossPercent: 0.45,
+  bitcoinTakeProfitPercent: 0.90,
+  bitcoinBreakEvenTriggerPercent: 0.35,
+  bitcoinTrailingAtrMultiplier: 1.5,
+  bitcoinExitOnTrendFlip: true,
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -173,6 +179,8 @@ function App() {
   const processedTokenKeysRef = useRef<Set<string>>(new Set());
   const qualityLogRef = useRef<Map<string, number>>(new Map());
   const lastBitcoinEntryRef = useRef(0);
+  const bitcoinHighWaterRef = useRef<Map<string, number>>(new Map());
+  const bitcoinPeakMoveRef = useRef<Map<string, number>>(new Map());
   
   useEffect(() => {
     configRef.current = config;
@@ -334,6 +342,15 @@ function App() {
           ? realPrice * Math.max(0, 1 - impact - simulatedSlippage)
           : realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
+        const bitcoinAtr = platform === 'bitcoin' ? currentBitcoinToken.atrPercent : 0;
+        const bitcoinStopPercent = Math.max(currentConfig.bitcoinStopLossPercent, bitcoinAtr * 1.5);
+        const bitcoinTargetPercent = Math.max(currentConfig.bitcoinTakeProfitPercent, bitcoinAtr * 2.5);
+        const riskStopPrice = platform === 'bitcoin'
+          ? direction === 'short' ? ourBuyPrice * (1 + bitcoinStopPercent / 100) : ourBuyPrice * (1 - bitcoinStopPercent / 100)
+          : undefined;
+        const riskTargetPrice = platform === 'bitcoin'
+          ? direction === 'short' ? ourBuyPrice * (1 - bitcoinTargetPercent / 100) : ourBuyPrice * (1 + bitcoinTargetPercent / 100)
+          : undefined;
         processedTokenKeysRef.current.add(tokenKey);
         if (platform === 'bitcoin') lastBitcoinEntryRef.current = Date.now();
         if (platform === 'bitcoin') localAvailableUsd -= snipeAmount + entryFee;
@@ -347,6 +364,7 @@ function App() {
           tokenName: token.name, tokenSymbol: token.symbol, platform, buyAmount: snipeAmount,
           buyPrice: ourBuyPrice, tokenAmount, lastMarketPrice: realPrice, entryFee,
           quoteCurrency: platform === 'bitcoin' ? 'USDT' : 'SOL', direction, status: 'open',
+          riskStopPrice, riskTargetPrice,
         };
 
         setTrades(prev => [newTrade, ...prev]);
@@ -406,6 +424,20 @@ function App() {
         }
 
         const effectiveMarketPrice = marketPrice || trade.lastMarketPrice || trade.buyPrice;
+        const isBitcoin = trade.platform === 'bitcoin';
+        const currentMovePercent = isBitcoin
+          ? trade.direction === 'short'
+            ? ((trade.buyPrice - effectiveMarketPrice) / trade.buyPrice) * 100
+            : ((effectiveMarketPrice - trade.buyPrice) / trade.buyPrice) * 100
+          : 0;
+        if (isBitcoin) {
+          const previousWater = bitcoinHighWaterRef.current.get(trade.id);
+          const nextWater = trade.direction === 'short'
+            ? Math.min(previousWater ?? effectiveMarketPrice, effectiveMarketPrice)
+            : Math.max(previousWater ?? effectiveMarketPrice, effectiveMarketPrice);
+          bitcoinHighWaterRef.current.set(trade.id, nextWater);
+          bitcoinPeakMoveRef.current.set(trade.id, Math.max(bitcoinPeakMoveRef.current.get(trade.id) || 0, currentMovePercent));
+        }
         const exitCandidate = liveCandidate
           ? { platform: trade.platform || 'raydium' as const, token: liveCandidate }
           : null;
@@ -428,10 +460,45 @@ function App() {
           ? trade.buyPrice / Math.max(sellPrice, Number.EPSILON)
           : sellPrice / Math.max(trade.buyPrice, Number.EPSILON);
         const timeExit = tradeAge >= maxAge;
+        const bitcoinAtr = isBitcoin ? currentBitcoinToken.atrPercent : 0;
+        const waterPrice = isBitcoin ? bitcoinHighWaterRef.current.get(trade.id) || effectiveMarketPrice : effectiveMarketPrice;
+        const trailDistance = isBitcoin ? Math.max(bitcoinAtr * currentConfig.bitcoinTrailingAtrMultiplier, 0.05) / 100 : 0;
+        const trailPrice = isBitcoin
+          ? trade.direction === 'short' ? waterPrice * (1 + trailDistance) : waterPrice * (1 - trailDistance)
+          : effectiveMarketPrice;
+        const breakEvenPrice = isBitcoin
+          ? trade.direction === 'short' ? trade.buyPrice * (1 + (trade.entryFee || 0) / Math.max(trade.buyAmount, 1)) : trade.buyPrice * (1 + (trade.entryFee || 0) / Math.max(trade.buyAmount, 1))
+          : trade.buyPrice;
+        const peakMovePercent = isBitcoin ? bitcoinPeakMoveRef.current.get(trade.id) || 0 : 0;
+        const breakEvenArmed = isBitcoin && currentConfig.bitcoinRiskEngine && peakMovePercent >= currentConfig.bitcoinBreakEvenTriggerPercent;
+        const protectedStopPrice = breakEvenArmed
+          ? breakEvenPrice
+          : trade.riskStopPrice;
+        const stopHit = isBitcoin && currentConfig.bitcoinRiskEngine && (
+          trade.direction === 'short' ? effectiveMarketPrice >= (protectedStopPrice || Infinity) : effectiveMarketPrice <= (protectedStopPrice || 0)
+        );
+        const targetHit = isBitcoin && currentConfig.bitcoinRiskEngine && (
+          trade.direction === 'short' ? effectiveMarketPrice <= (trade.riskTargetPrice || 0) : effectiveMarketPrice >= (trade.riskTargetPrice || Infinity)
+        );
+        const breakEvenHit = breakEvenArmed && (
+          trade.direction === 'short' ? effectiveMarketPrice >= breakEvenPrice : effectiveMarketPrice <= breakEvenPrice
+        );
+        const trailingHit = isBitcoin && currentConfig.bitcoinRiskEngine && peakMovePercent >= currentConfig.bitcoinBreakEvenTriggerPercent && (
+          trade.direction === 'short' ? effectiveMarketPrice >= trailPrice : effectiveMarketPrice <= trailPrice
+        );
+        const trendFlip = isBitcoin && currentConfig.bitcoinRiskEngine && currentConfig.bitcoinExitOnTrendFlip && currentBitcoinToken.trendReady && currentBitcoinToken.trendDirection !== 'neutral' && currentBitcoinToken.trendDirection !== trade.direction;
 
         let exitReason = '';
-        if (priceMultiplier >= currentConfig.takeProfitMultiplier) {
-          exitReason = `TOMA DE GANANCIA a ${priceMultiplier.toFixed(2)}x`;
+        if (targetHit || (!isBitcoin && priceMultiplier >= currentConfig.takeProfitMultiplier)) {
+          exitReason = isBitcoin ? `OBJETIVO ATR/RENDIMIENTO a ${currentMovePercent.toFixed(2)}%` : `TOMA DE GANANCIA a ${priceMultiplier.toFixed(2)}x`;
+        } else if (breakEvenHit) {
+          exitReason = `BREAK-EVEN protegido tras +${currentMovePercent.toFixed(2)}%`;
+        } else if (stopHit) {
+          exitReason = `STOP ATR a ${currentMovePercent.toFixed(2)}%`;
+        } else if (trailingHit) {
+          exitReason = `TRAILING ATR tras máximo favorable de ${currentMovePercent.toFixed(2)}%`;
+        } else if (trendFlip) {
+          exitReason = `SALIDA: cambio de tendencia ${currentBitcoinToken.trendDirection.toUpperCase()}`;
         } else if (profitPercent <= -currentConfig.stopLossPercent) {
           exitReason = `STOP LOSS a ${profitPercent.toFixed(1)}%`;
         } else if (Math.abs(profitSOL) >= currentConfig.maxLossPerTrade && profitSOL < 0) {
@@ -453,6 +520,7 @@ function App() {
           exitFee,
           profit: profitSOL,
           profitPercent,
+          exitReason,
           status: 'closed',
           txHash: `PAPER-${generateId()}`,
         };
@@ -460,6 +528,8 @@ function App() {
         if (trade.platform === 'bitcoin') {
           const balanceDelta = trade.direction === 'short' ? trade.buyAmount + profitSOL : sellAmount - exitFee;
           setUsdBalance(prev => prev + balanceDelta); usdBalanceRef.current += balanceDelta;
+          bitcoinHighWaterRef.current.delete(trade.id);
+          bitcoinPeakMoveRef.current.delete(trade.id);
         }
         else { setSolBalance(prev => prev + sellAmount - exitFee); solBalanceRef.current += sellAmount - exitFee; }
         tradesRef.current = tradesRef.current.map(t => t.id === trade.id ? closedTrade : t);

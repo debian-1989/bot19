@@ -30,6 +30,12 @@ export interface BotConfig {
   bitcoinFeeRate: number;
   bitcoinTradingDirection: 'both' | 'long' | 'short';
   bitcoinTrendFilter: boolean;
+  bitcoinRiskEngine: boolean;
+  bitcoinStopLossPercent: number;
+  bitcoinTakeProfitPercent: number;
+  bitcoinBreakEvenTriggerPercent: number;
+  bitcoinTrailingAtrMultiplier: number;
+  bitcoinExitOnTrendFlip: boolean;
 }
 
 export interface DetectedTransaction {
@@ -60,6 +66,9 @@ export interface Trade {
   platform?: 'pump.fun' | 'raydium' | 'bitcoin';
   quoteCurrency?: 'SOL' | 'USDT';
   direction?: 'long' | 'short';
+  riskStopPrice?: number;
+  riskTargetPrice?: number;
+  exitReason?: string;
   buyAmount: number;
   buyPrice: number;
   tokenAmount?: number;

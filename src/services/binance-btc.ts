@@ -15,6 +15,7 @@ export interface BitcoinMarketToken {
   emaSlow: number;
   rsi: number;
   trendReady: boolean;
+  atrPercent: number;
   create_time: number;
 }
 
@@ -41,7 +42,7 @@ class BinanceBitcoinService {
     mint: 'BTCUSDT', name: 'Bitcoin', symbol: 'BTC', price: 0,
     bidPrice: 0, askPrice: 0, spreadPercent: 0, liquidity: 0,
     dailyVolume: 0, priceChangePercent: 0, trendDirection: 'neutral', trendStrength: 0,
-    emaFast: 0, emaSlow: 0, rsi: 50, trendReady: false, create_time: Date.now(),
+    emaFast: 0, emaSlow: 0, rsi: 50, trendReady: false, atrPercent: 0, create_time: Date.now(),
   };
   private listeners: TokenListener[] = [];
   private statusListeners: StatusListener[] = [];
@@ -113,6 +114,7 @@ class BinanceBitcoinService {
         dailyVolume: Number(ticker.quoteVolume || 0),
         priceChangePercent: Number(ticker.priceChangePercent || 0),
         ...trend,
+        atrPercent: this.calculateAtrPercent(closes),
       });
     } catch (error) {
       this.setStatus({ error: error instanceof Error ? error.message : 'Error Binance REST' });
@@ -140,6 +142,12 @@ class BinanceBitcoinService {
         ? 'short'
         : 'neutral';
     return { trendDirection, trendStrength: strength, emaFast: fast, emaSlow: slow, rsi, trendReady: true };
+  }
+
+  private calculateAtrPercent(closes: number[], period = 14) {
+    if (closes.length < period + 1) return 0;
+    const returns = closes.slice(1).map((price, index) => Math.abs((price - closes[index]) / closes[index]) * 100);
+    return returns.slice(-period).reduce((sum, value) => sum + value, 0) / period;
   }
 
   private applyDepth(data: { bids?: string[][]; asks?: string[][] }) {
