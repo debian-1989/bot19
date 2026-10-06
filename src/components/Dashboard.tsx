@@ -18,6 +18,11 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
   const closedTrades = trades.filter(t => t.status === 'closed');
   const solProfit = closedTrades.filter(t => t.quoteCurrency !== 'USDT').reduce((sum, t) => sum + (t.profit || 0), 0);
   const usdProfit = closedTrades.filter(t => t.quoteCurrency === 'USDT').reduce((sum, t) => sum + (t.profit || 0), 0);
+  // App ya descuenta el capital al abrir la posición; no volver a restarlo aquí.
+  const solAvailable = Math.max(0, solBalance);
+  const usdAvailable = Math.max(0, usdBalance);
+  const solEquity = solAvailable + solOpen;
+  const usdEquity = usdAvailable + usdOpen;
 
   return (
     <div className="space-y-6">
@@ -82,14 +87,14 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 rounded-lg p-4">
-              <p className="text-xs text-gray-400 mb-1">Balance Total</p>
-              <p className="text-xl font-bold text-white">{solBalance.toFixed(3)} SOL</p><p className="text-sm font-bold text-orange-300 mt-1">{usdBalance.toFixed(2)} USDT</p>
+              <p className="text-xs text-gray-400 mb-1">Patrimonio estimado</p>
+              <p className="text-xl font-bold text-white">{solEquity.toFixed(3)} SOL</p><p className="text-sm font-bold text-orange-300 mt-1">{usdEquity.toFixed(2)} USDT</p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Capital Disponible</p>
               <p className="text-xl font-bold text-green-400">
-                {Math.max(0, solBalance - solOpen).toFixed(3)} SOL
-                <span className="block text-sm text-orange-300 mt-1">{Math.max(0, usdBalance - usdOpen).toFixed(2)} USDT</span>
+                {solAvailable.toFixed(3)} SOL
+                <span className="block text-sm text-orange-300 mt-1">{usdAvailable.toFixed(2)} USDT</span>
               </p>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4">
@@ -102,7 +107,7 @@ export default function Dashboard({ stats, logs, detectedTxns, trades, isRunning
             <div className="bg-gray-800/50 rounded-lg p-4">
               <p className="text-xs text-gray-400 mb-1">Trades Posibles</p>
               <p className="text-xl font-bold text-blue-400">
-                {Math.floor(Math.max(0, solBalance - solOpen) / 0.1)} SOL / {Math.floor(Math.max(0, usdBalance - usdOpen) / 20)} BTC
+                {Math.floor(solAvailable / 0.1)} SOL / {Math.floor(usdAvailable / 20)} BTC
               </p>
               <p className="text-xs text-gray-500">según saldo y monto configurado</p>
             </div>
