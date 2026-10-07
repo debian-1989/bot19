@@ -52,6 +52,13 @@ const defaultConfig: BotConfig = {
   bitcoinBreakEvenTriggerPercent: 0.35,
   bitcoinTrailingAtrMultiplier: 1.5,
   bitcoinExitOnTrendFlip: true,
+  aiTradingEnabled: false,
+  aiPairs: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'DOGEUSDT'],
+  aiEntryPrices: { BTCUSDT: 0, ETHUSDT: 0, SOLUSDT: 0, BNBUSDT: 0, DOGEUSDT: 0 },
+  aiEntryTolerancePercent: 0.10,
+  aiStopLossPercent: 0.60,
+  aiTakeProfitPercent: 1.20,
+  aiMaxPositionsPerPair: 1,
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -176,6 +183,7 @@ function App() {
   const [realTokens, setRealTokens] = useState<PumpFunToken[]>([]);
   const [raydiumTokens, setRaydiumTokens] = useState<RaydiumToken[]>([]);
   const [bitcoinToken, setBitcoinToken] = useState<BitcoinMarketToken>(binanceBitcoinService.getToken());
+  const [bitcoinTokens, setBitcoinTokens] = useState<BitcoinMarketToken[]>(binanceBitcoinService.getTokens());
   const [bitcoinStatus, setBitcoinStatus] = useState<BitcoinServiceStatus>(binanceBitcoinService.getStatus());
   
   const configRef = useRef(config);
@@ -184,6 +192,7 @@ function App() {
   const tokensRef = useRef<PumpFunToken[]>([]);
   const raydiumTokensRef = useRef<RaydiumToken[]>([]);
   const bitcoinTokenRef = useRef(bitcoinToken);
+  const bitcoinTokensRef = useRef(bitcoinTokens);
   const processedTokenKeysRef = useRef<Set<string>>(new Set());
   const qualityLogRef = useRef<Map<string, number>>(new Map());
   const lastBitcoinEntryRef = useRef(0);
@@ -198,7 +207,8 @@ function App() {
     tokensRef.current = realTokens;
     raydiumTokensRef.current = raydiumTokens;
     bitcoinTokenRef.current = bitcoinToken;
-  }, [config, trades, solBalance, usdBalance, realTokens, raydiumTokens, bitcoinToken]);
+    bitcoinTokensRef.current = bitcoinTokens;
+  }, [config, trades, solBalance, usdBalance, realTokens, raydiumTokens, bitcoinToken, bitcoinTokens]);
 
   const addLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -239,6 +249,10 @@ function App() {
   }, []);
 
   useEffect(() => {
+    return binanceBitcoinService.onTokensUpdate(tokens => setBitcoinTokens(tokens));
+  }, []);
+
+  useEffect(() => {
     return binanceBitcoinService.onStatusUpdate(status => setBitcoinStatus(status));
   }, []);
 
@@ -256,6 +270,7 @@ function App() {
       const currentPumpTokens = tokensRef.current;
       const currentRaydiumTokens = raydiumTokensRef.current;
       const currentBitcoinToken = bitcoinTokenRef.current;
+      const currentBitcoinTokens = bitcoinTokensRef.current;
 
       console.log('[App] Detection interval triggered', {
         pumpTokens: currentPumpTokens.length,
@@ -266,16 +281,21 @@ function App() {
       const candidates: Candidate[] = [
         ...currentPumpTokens.map(token => ({ token, platform: 'pump.fun' as const, price: pumpFunRealService.calculateTokenPrice(token) })),
         ...currentRaydiumTokens.map(token => ({ token, platform: 'raydium' as const, price: token.price || 0 })),
-        { token: currentBitcoinToken, platform: 'bitcoin' as const, price: currentBitcoinToken.price },
+        ...currentBitcoinTokens.map(token => ({ token, platform: 'bitcoin' as const, price: token.price })),
       ].filter(candidate => {
         const selected = currentConfig.entryPlatform;
         const allowed = selected === 'all' || selected === 'both' && candidate.platform !== 'bitcoin' || selected === 'solana' && candidate.platform !== 'bitcoin' || selected === candidate.platform;
         if (!allowed) return false;
         if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
         if (candidate.platform === 'bitcoin') {
-          if (currentConfig.bitcoinTrendFilter && (!currentBitcoinToken.trendReady || currentBitcoinToken.trendDirection === 'neutral')) return false;
-          const hasOpenBitcoin = currentTrades.some(trade => trade.status === 'open' && trade.tokenAddress === 'BTCUSDT');
-          return !hasOpenBitcoin && Date.now() - lastBitcoinEntryRef.current >= 10_000;
+          const aiPair = candidate.token.mint;
+          const configuredEntry = currentConfig.aiEntryPrices[aiPair] || 0;
+          const tolerance = Math.max(0.01, currentConfig.aiEntryTolerancePercent);
+          const atConfiguredPrice = configuredEntry <= 0 || Math.abs(candidate.price - configuredEntry) / configuredEntry * 100 <= tolerance;
+          if (currentConfig.aiTradingEnabled && !atConfiguredPrice) return false;
+          if (currentConfig.bitcoinTrendFilter && (!candidate.token.trendReady || candidate.token.trendDirection === 'neutral')) return false;
+          const openForPair = currentTrades.filter(trade => trade.status === 'open' && trade.tokenAddress === aiPair).length;
+          return openForPair < (currentConfig.aiTradingEnabled ? currentConfig.aiMaxPositionsPerPair : 1) && Date.now() - lastBitcoinEntryRef.current >= 1000;
         }
         return !processedTokenKeysRef.current.has(`${candidate.platform}:${candidate.token.mint}`);
       });
@@ -305,16 +325,17 @@ function App() {
         }
 
         const quoteAmount = platform === 'bitcoin' ? currentConfig.bitcoinTradeAmountUsd : currentConfig.tradeAmount;
+        const marketBitcoinToken = platform === 'bitcoin' ? token as BitcoinMarketToken : currentBitcoinToken;
         const direction: 'long' | 'short' = platform === 'bitcoin'
           ? currentConfig.bitcoinTradingDirection === 'short'
             ? 'short'
             : currentConfig.bitcoinTradingDirection === 'long'
               ? 'long'
-              : currentConfig.bitcoinTrendFilter && currentBitcoinToken.trendReady
-                ? currentBitcoinToken.trendDirection as 'long' | 'short'
-                : currentBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
+              : currentConfig.bitcoinTrendFilter && marketBitcoinToken.trendReady
+                ? marketBitcoinToken.trendDirection as 'long' | 'short'
+                : marketBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
           : 'long';
-        if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter && direction !== currentBitcoinToken.trendDirection) continue;
+        if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter && direction !== marketBitcoinToken.trendDirection) continue;
         const quality = evaluateCandidate(candidate, currentConfig, quoteAmount);
         if (!quality.accepted) {
           const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
@@ -351,8 +372,8 @@ function App() {
           : realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
         const bitcoinAtr = platform === 'bitcoin' ? currentBitcoinToken.atrPercent : 0;
-        const bitcoinStopPercent = Math.max(currentConfig.bitcoinStopLossPercent, bitcoinAtr * 1.5);
-        const bitcoinTargetPercent = Math.max(currentConfig.bitcoinTakeProfitPercent, bitcoinAtr * 2.5);
+        const bitcoinStopPercent = Math.max(platform === 'bitcoin' && currentConfig.aiTradingEnabled ? currentConfig.aiStopLossPercent : currentConfig.bitcoinStopLossPercent, bitcoinAtr * 1.5);
+        const bitcoinTargetPercent = Math.max(platform === 'bitcoin' && currentConfig.aiTradingEnabled ? currentConfig.aiTakeProfitPercent : currentConfig.bitcoinTakeProfitPercent, bitcoinAtr * 2.5);
         const riskStopPrice = platform === 'bitcoin'
           ? direction === 'short' ? ourBuyPrice * (1 + bitcoinStopPercent / 100) : ourBuyPrice * (1 - bitcoinStopPercent / 100)
           : undefined;
@@ -402,6 +423,7 @@ function App() {
       const currentPumpTokens = tokensRef.current;
       const currentRaydiumTokens = raydiumTokensRef.current;
       const currentBitcoinToken = bitcoinTokenRef.current;
+      const currentBitcoinTokens = bitcoinTokensRef.current;
       const now = Date.now();
       
       currentTrades.forEach(trade => {
@@ -411,7 +433,7 @@ function App() {
         const maxAge = currentConfig.timeBasedExit * 1000;
 
         const liveCandidate = trade.platform === 'bitcoin'
-          ? (currentBitcoinToken.mint === trade.tokenAddress ? currentBitcoinToken : undefined)
+          ? currentBitcoinTokens.find(token => token.mint === trade.tokenAddress)
           : trade.platform === 'pump.fun'
             ? currentPumpTokens.find(token => token.mint === trade.tokenAddress)
             : currentRaydiumTokens.find(token => token.mint === trade.tokenAddress);
@@ -433,6 +455,7 @@ function App() {
 
         const effectiveMarketPrice = marketPrice || trade.lastMarketPrice || trade.buyPrice;
         const isBitcoin = trade.platform === 'bitcoin';
+        const bitcoinLiveToken = isBitcoin ? (liveCandidate as BitcoinMarketToken | undefined) || currentBitcoinToken : currentBitcoinToken;
         const currentMovePercent = isBitcoin
           ? trade.direction === 'short'
             ? ((trade.buyPrice - effectiveMarketPrice) / trade.buyPrice) * 100
@@ -468,7 +491,7 @@ function App() {
           ? trade.buyPrice / Math.max(sellPrice, Number.EPSILON)
           : sellPrice / Math.max(trade.buyPrice, Number.EPSILON);
         const timeExit = tradeAge >= maxAge;
-        const bitcoinAtr = isBitcoin ? currentBitcoinToken.atrPercent : 0;
+        const bitcoinAtr = isBitcoin ? bitcoinLiveToken.atrPercent : 0;
         const waterPrice = isBitcoin ? bitcoinHighWaterRef.current.get(trade.id) || effectiveMarketPrice : effectiveMarketPrice;
         const trailDistance = isBitcoin ? Math.max(bitcoinAtr * currentConfig.bitcoinTrailingAtrMultiplier, 0.05) / 100 : 0;
         const trailPrice = isBitcoin
@@ -494,7 +517,7 @@ function App() {
         const trailingHit = isBitcoin && currentConfig.bitcoinRiskEngine && peakMovePercent >= currentConfig.bitcoinBreakEvenTriggerPercent && (
           trade.direction === 'short' ? effectiveMarketPrice >= trailPrice : effectiveMarketPrice <= trailPrice
         );
-        const trendFlip = isBitcoin && currentConfig.bitcoinRiskEngine && currentConfig.bitcoinExitOnTrendFlip && currentBitcoinToken.trendReady && currentBitcoinToken.trendDirection !== 'neutral' && currentBitcoinToken.trendDirection !== trade.direction;
+        const trendFlip = isBitcoin && currentConfig.bitcoinRiskEngine && currentConfig.bitcoinExitOnTrendFlip && bitcoinLiveToken.trendReady && bitcoinLiveToken.trendDirection !== 'neutral' && bitcoinLiveToken.trendDirection !== trade.direction;
 
         let exitReason = '';
         if (targetHit || (!isBitcoin && priceMultiplier >= currentConfig.takeProfitMultiplier)) {
@@ -506,7 +529,7 @@ function App() {
         } else if (trailingHit) {
           exitReason = `TRAILING ATR tras máximo favorable de ${currentMovePercent.toFixed(2)}%`;
         } else if (trendFlip) {
-          exitReason = `SALIDA: cambio de tendencia ${currentBitcoinToken.trendDirection.toUpperCase()}`;
+          exitReason = `SALIDA: cambio de tendencia ${bitcoinLiveToken.trendDirection.toUpperCase()}`;
         } else if (profitPercent <= -currentConfig.stopLossPercent) {
           exitReason = `STOP LOSS a ${profitPercent.toFixed(1)}%`;
         } else if (Math.abs(profitSOL) >= currentConfig.maxLossPerTrade && profitSOL < 0) {
@@ -584,8 +607,8 @@ function App() {
     
     if (newRunning) {
       const selectedNetwork = configRef.current.entryPlatform;
-      const useSolana = selectedNetwork !== 'bitcoin';
-      const useBitcoin = selectedNetwork === 'bitcoin' || selectedNetwork === 'all';
+      const useSolana = !configRef.current.aiTradingEnabled && selectedNetwork !== 'bitcoin';
+      const useBitcoin = configRef.current.aiTradingEnabled || selectedNetwork === 'bitcoin' || selectedNetwork === 'all';
       addLog('🟢 Bot INICIADO');
       if (useSolana) {
         addLog('🔗 Conectando a pump.fun...');
@@ -598,8 +621,10 @@ function App() {
         addLog('⏸️ Solana desactivada: no se consultarán Pump.fun, Raydium ni Helius');
       }
       if (useBitcoin) {
-        binanceBitcoinService.startPolling(10000);
-        addLog('₿ Conectando a Binance BTC/USDT | WebSocket trade + depth 100ms | REST respaldo 10s');
+        const aiSymbols = configRef.current.aiTradingEnabled ? configRef.current.aiPairs : ['BTCUSDT'];
+        binanceBitcoinService.startPolling(10000, aiSymbols);
+        addLog(`₿ Conectando a Binance | ${aiSymbols.join(', ')} | WebSocket multi-par + REST respaldo 10s`);
+        if (configRef.current.aiTradingEnabled) addLog('🤖 Trading con IA Demo activo: espera precios configurados y gestiona stop/take automático');
       }
       addLog(`🚀 Red activa: ${useSolana && useBitcoin ? 'Solana + Bitcoin' : useBitcoin ? 'Bitcoin' : 'Solana'}`);
       addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');

@@ -279,6 +279,54 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             />
           </div>
 
+          <div className="md:col-span-2 border-t border-gray-800 pt-4 mt-2">
+            <p className="text-sm font-semibold text-white mb-3">🤖 Trading con IA — Demo autónomo</p>
+            <p className="text-xs text-gray-500 mb-3">Busca señales en pares seleccionados, espera el precio exacto con tolerancia y gestiona automáticamente stop loss, take profit, break-even y trailing. No envía órdenes reales.</p>
+          </div>
+          <div className="md:col-span-2 flex items-center justify-between rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-white">Activar Trading con IA</p>
+              <p className="text-xs text-gray-400">Long + short simulado, una posición por par</p>
+            </div>
+            <button type="button" disabled={isRunning} onClick={() => updateConfig('aiTradingEnabled', !config.aiTradingEnabled)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.aiTradingEnabled ? 'bg-cyan-600' : 'bg-gray-700'} disabled:opacity-50`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.aiTradingEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+          <div className="md:col-span-2">
+            <label className="block text-xs text-gray-400 mb-1.5">Pares Binance USDT (separados por coma)</label>
+            <input type="text" value={config.aiPairs.join(', ')} disabled={isRunning}
+              onChange={e => updateConfig('aiPairs', Array.from(new Set(e.target.value.toUpperCase().split(',').map(v => v.trim()).filter(Boolean))).slice(0, 20))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
+            <p className="text-xs text-gray-500 mt-1">Recomendados: BTCUSDT, ETHUSDT, SOLUSDT, BNBUSDT y DOGEUSDT.</p>
+          </div>
+          {config.aiPairs.map(pair => (
+            <div key={pair}>
+              <label className="block text-xs text-gray-400 mb-1.5">Precio exacto de entrada — {pair}</label>
+              <input type="number" min="0" step="any" value={config.aiEntryPrices[pair] ?? 0} disabled={isRunning}
+                onChange={e => updateConfig('aiEntryPrices', { ...config.aiEntryPrices, [pair]: Math.max(0, Number.parseFloat(e.target.value) || 0) })}
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
+              <p className="text-xs text-gray-500 mt-1">0 = sin precio fijo para este par</p>
+            </div>
+          ))}
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Tolerancia de entrada (%)</label>
+            <input type="number" min="0.01" max="2" step="0.01" value={config.aiEntryTolerancePercent} disabled={isRunning}
+              onChange={e => updateConfig('aiEntryTolerancePercent', Math.min(2, Math.max(0.01, Number.parseFloat(e.target.value) || 0.01)))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Stop loss IA (%)</label>
+            <input type="number" min="0.1" max="10" step="0.05" value={config.aiStopLossPercent} disabled={isRunning}
+              onChange={e => updateConfig('aiStopLossPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Take profit IA (%)</label>
+            <input type="number" min="0.1" max="20" step="0.05" value={config.aiTakeProfitPercent} disabled={isRunning}
+              onChange={e => updateConfig('aiTakeProfitPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
+          </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">₿ Spread máximo BTC (%)</label>
             <input type="number" min="0.01" step="0.01" value={config.maxBitcoinSpreadPercent}

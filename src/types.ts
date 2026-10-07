@@ -38,6 +38,13 @@ export interface BotConfig {
   bitcoinBreakEvenTriggerPercent: number;
   bitcoinTrailingAtrMultiplier: number;
   bitcoinExitOnTrendFlip: boolean;
+  aiTradingEnabled: boolean;
+  aiPairs: string[];
+  aiEntryPrices: Record<string, number>;
+  aiEntryTolerancePercent: number;
+  aiStopLossPercent: number;
+  aiTakeProfitPercent: number;
+  aiMaxPositionsPerPair: number;
 }
 
 export interface DetectedTransaction {
