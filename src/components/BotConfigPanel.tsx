@@ -320,6 +320,10 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
             <select value={config.aiCandleInterval} disabled={isRunning}
               onChange={e => updateConfig('aiCandleInterval', e.target.value as BotConfig['aiCandleInterval'])}
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50">
+              <option value="5s">5 segundos — ultra-scalping</option>
+              <option value="10s">10 segundos</option>
+              <option value="15s">15 segundos</option>
+              <option value="30s">30 segundos</option>
               <option value="1m">1 minuto — scalping</option>
               <option value="3m">3 minutos</option>
               <option value="5m">5 minutos</option>
@@ -329,7 +333,7 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
               <option value="4h">4 horas</option>
               <option value="1d">1 día</option>
             </select>
-            <p className="text-xs text-gray-500 mt-1">EMA 9/21, RSI 14 y ATR se recalculan sobre esta temporalidad.</p>
+            <p className="text-xs text-gray-500 mt-1">Las velas de segundos se construyen localmente con aggTrades de Binance; EMA 9/21, RSI 14 y ATR se recalculan sobre la temporalidad elegida.</p>
           </div>
           <div>
             <label className="block text-xs text-gray-400 mb-1.5">Stop loss IA (%)</label>
