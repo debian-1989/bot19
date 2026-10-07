@@ -316,6 +316,22 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50" />
           </div>
           <div>
+            <label className="block text-xs text-gray-400 mb-1.5">Temporalidad de velas para la IA</label>
+            <select value={config.aiCandleInterval} disabled={isRunning}
+              onChange={e => updateConfig('aiCandleInterval', e.target.value as BotConfig['aiCandleInterval'])}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-white focus:border-cyan-500 focus:outline-none disabled:opacity-50">
+              <option value="1m">1 minuto — scalping</option>
+              <option value="3m">3 minutos</option>
+              <option value="5m">5 minutos</option>
+              <option value="15m">15 minutos</option>
+              <option value="30m">30 minutos</option>
+              <option value="1h">1 hora</option>
+              <option value="4h">4 horas</option>
+              <option value="1d">1 día</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">EMA 9/21, RSI 14 y ATR se recalculan sobre esta temporalidad.</p>
+          </div>
+          <div>
             <label className="block text-xs text-gray-400 mb-1.5">Stop loss IA (%)</label>
             <input type="number" min="0.1" max="10" step="0.05" value={config.aiStopLossPercent} disabled={isRunning}
               onChange={e => updateConfig('aiStopLossPercent', Math.max(0.1, Number.parseFloat(e.target.value) || 0.1))}
@@ -357,7 +373,7 @@ export default function BotConfigPanel({ config, setConfig, isRunning }: BotConf
           <div className="flex items-center justify-between rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-white">Filtro de seguimiento de tendencia</p>
-              <p className="text-xs text-gray-400">EMA 9/21 + RSI 14 en velas de 1 minuto</p>
+              <p className="text-xs text-gray-400">EMA 9/21 + RSI 14 en la temporalidad seleccionada</p>
             </div>
             <button type="button" disabled={isRunning} onClick={() => updateConfig('bitcoinTrendFilter', !config.bitcoinTrendFilter)}
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.bitcoinTrendFilter ? 'bg-blue-600' : 'bg-gray-700'} disabled:opacity-50`}>

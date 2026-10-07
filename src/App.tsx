@@ -59,6 +59,7 @@ const defaultConfig: BotConfig = {
   aiStopLossPercent: 0.60,
   aiTakeProfitPercent: 1.20,
   aiMaxPositionsPerPair: 1,
+  aiCandleInterval: '1m',
 };
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -622,8 +623,8 @@ function App() {
       }
       if (useBitcoin) {
         const aiSymbols = configRef.current.aiTradingEnabled ? configRef.current.aiPairs : ['BTCUSDT'];
-        binanceBitcoinService.startPolling(10000, aiSymbols);
-        addLog(`₿ Conectando a Binance | ${aiSymbols.join(', ')} | WebSocket multi-par + REST respaldo 10s`);
+        binanceBitcoinService.startPolling(10000, aiSymbols, configRef.current.aiCandleInterval);
+        addLog(`₿ Conectando a Binance | ${aiSymbols.join(', ')} | velas ${configRef.current.aiCandleInterval} | WebSocket multi-par + REST respaldo 10s`);
         if (configRef.current.aiTradingEnabled) addLog('🤖 Trading con IA Demo activo: espera precios configurados y gestiona stop/take automático');
       }
       addLog(`🚀 Red activa: ${useSolana && useBitcoin ? 'Solana + Bitcoin' : useBitcoin ? 'Bitcoin' : 'Solana'}`);
