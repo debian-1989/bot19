@@ -285,7 +285,9 @@ function App() {
         ...currentBitcoinTokens.map(token => ({ token, platform: 'bitcoin' as const, price: token.price })),
       ].filter(candidate => {
         const selected = currentConfig.entryPlatform;
-        const allowed = selected === 'all' || selected === 'both' && candidate.platform !== 'bitcoin' || selected === 'solana' && candidate.platform !== 'bitcoin' || selected === candidate.platform;
+        const allowed = currentConfig.aiTradingEnabled
+          ? candidate.platform === 'bitcoin'
+          : selected === 'all' || selected === 'both' && candidate.platform !== 'bitcoin' || selected === 'solana' && candidate.platform !== 'bitcoin' || selected === candidate.platform;
         if (!allowed) return false;
         if (currentConfig.graduatedOnly && candidate.platform === 'pump.fun' && !(candidate.token as PumpFunToken).complete) return false;
         if (candidate.platform === 'bitcoin') {
@@ -294,7 +296,11 @@ function App() {
           const tolerance = Math.max(0.01, currentConfig.aiEntryTolerancePercent);
           const atConfiguredPrice = configuredEntry <= 0 || Math.abs(candidate.price - configuredEntry) / configuredEntry * 100 <= tolerance;
           if (currentConfig.aiTradingEnabled && !atConfiguredPrice) return false;
-          if (currentConfig.bitcoinTrendFilter && (!candidate.token.trendReady || candidate.token.trendDirection === 'neutral')) return false;
+          const fastTimeframe = ['5s', '10s', '15s', '30s', '1m'].includes(currentConfig.aiCandleInterval);
+          const momentumDirection = candidate.token.trendDirection !== 'neutral'
+            || (candidate.token.trendReady && candidate.token.emaFast > candidate.token.emaSlow && candidate.token.rsi >= 48 && candidate.token.rsi <= 80)
+            || (candidate.token.trendReady && candidate.token.emaFast < candidate.token.emaSlow && candidate.token.rsi >= 20 && candidate.token.rsi <= 52);
+          if (currentConfig.bitcoinTrendFilter && (!candidate.token.trendReady || (!fastTimeframe && candidate.token.trendDirection === 'neutral') || (fastTimeframe && !momentumDirection))) return false;
           const openForPair = currentTrades.filter(trade => trade.status === 'open' && trade.tokenAddress === aiPair).length;
           return openForPair < (currentConfig.aiTradingEnabled ? currentConfig.aiMaxPositionsPerPair : 1) && Date.now() - lastBitcoinEntryRef.current >= 1000;
         }
@@ -333,7 +339,9 @@ function App() {
             : currentConfig.bitcoinTradingDirection === 'long'
               ? 'long'
               : currentConfig.bitcoinTrendFilter && marketBitcoinToken.trendReady
-                ? marketBitcoinToken.trendDirection as 'long' | 'short'
+                ? (marketBitcoinToken.trendDirection !== 'neutral'
+                  ? marketBitcoinToken.trendDirection as 'long' | 'short'
+                  : marketBitcoinToken.emaFast >= marketBitcoinToken.emaSlow ? 'long' : 'short')
                 : marketBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
           : 'long';
         if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter && direction !== marketBitcoinToken.trendDirection) continue;
@@ -372,7 +380,7 @@ function App() {
           ? realPrice * Math.max(0, 1 - impact - simulatedSlippage)
           : realPrice * (1 + impact + simulatedSlippage);
         const tokenAmount = snipeAmount / ourBuyPrice;
-        const bitcoinAtr = platform === 'bitcoin' ? currentBitcoinToken.atrPercent : 0;
+        const bitcoinAtr = platform === 'bitcoin' ? marketBitcoinToken.atrPercent : 0;
         const bitcoinStopPercent = Math.max(platform === 'bitcoin' && currentConfig.aiTradingEnabled ? currentConfig.aiStopLossPercent : currentConfig.bitcoinStopLossPercent, bitcoinAtr * 1.5);
         const bitcoinTargetPercent = Math.max(platform === 'bitcoin' && currentConfig.aiTradingEnabled ? currentConfig.aiTakeProfitPercent : currentConfig.bitcoinTakeProfitPercent, bitcoinAtr * 2.5);
         const riskStopPrice = platform === 'bitcoin'
