@@ -344,7 +344,14 @@ function App() {
                   : marketBitcoinToken.emaFast >= marketBitcoinToken.emaSlow ? 'long' : 'short')
                 : marketBitcoinToken.priceChangePercent < 0 ? 'short' : 'long'
           : 'long';
-        if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter && direction !== marketBitcoinToken.trendDirection) continue;
+        if (platform === 'bitcoin' && currentConfig.bitcoinTrendFilter) {
+          const fastTimeframe = ['5s', '10s', '15s', '30s', '1m'].includes(currentConfig.aiCandleInterval);
+          const directionConfirmed = direction === marketBitcoinToken.trendDirection
+            || (fastTimeframe && marketBitcoinToken.trendDirection === 'neutral' && marketBitcoinToken.trendReady
+              && ((direction === 'long' && marketBitcoinToken.emaFast >= marketBitcoinToken.emaSlow && marketBitcoinToken.rsi >= 48 && marketBitcoinToken.rsi <= 80)
+                || (direction === 'short' && marketBitcoinToken.emaFast < marketBitcoinToken.emaSlow && marketBitcoinToken.rsi >= 20 && marketBitcoinToken.rsi <= 52)));
+          if (!directionConfirmed) continue;
+        }
         const quality = evaluateCandidate(candidate, currentConfig, quoteAmount);
         if (!quality.accepted) {
           const lastLogged = qualityLogRef.current.get(tokenKey) || 0;
@@ -633,7 +640,10 @@ function App() {
         const aiSymbols = configRef.current.aiTradingEnabled ? configRef.current.aiPairs : ['BTCUSDT'];
         binanceBitcoinService.startPolling(10000, aiSymbols, configRef.current.aiCandleInterval);
         addLog(`₿ Conectando a Binance | ${aiSymbols.join(', ')} | velas ${configRef.current.aiCandleInterval} | WebSocket multi-par + REST respaldo 10s`);
-        if (configRef.current.aiTradingEnabled) addLog('🤖 Trading con IA Demo activo: espera precios configurados y gestiona stop/take automático');
+        if (configRef.current.aiTradingEnabled) {
+          addLog(`🤖 Trading con IA Demo activo | monto ${configRef.current.bitcoinTradeAmountUsd} USDT | stop ${configRef.current.aiStopLossPercent}% | take ${configRef.current.aiTakeProfitPercent}%`);
+          addLog(`🎯 Entradas: precio 0 = libre; tolerancia ${configRef.current.aiEntryTolerancePercent}% | tendencia ${configRef.current.bitcoinTrendFilter ? 'activa' : 'desactivada'} | autoSnipe ${configRef.current.autoSnipe ? 'activo' : 'apagado'}`);
+        }
       }
       addLog(`🚀 Red activa: ${useSolana && useBitcoin ? 'Solana + Bitcoin' : useBitcoin ? 'Bitcoin' : 'Solana'}`);
       addLog('📈 Paper trading realista: precios, liquidez y salidas basadas en datos vivos');
